@@ -203,6 +203,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable input.num{text-align:right}
 .cattable .src{word-break:keep-all; overflow-wrap:anywhere}
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
+.btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
+.btn.danger{color:var(--danger)}
+.btn.danger:hover{border-color:var(--danger)}
 #editarea{margin-top:16px}
 #editarea + .panel, #toggle-edit + #editarea[hidden] + .panel{margin-top:16px}
 .seg{display:flex; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden}
@@ -361,7 +364,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     <div class="modalhead">
       <h2 id="cat-title">품목 관리 <span id="cat-count" class="catcount"></span></h2>
       <input id="cat-search" type="search" placeholder="품목 검색">
-      <button class="btn" type="button" id="cat-add">+ 품목 추가</button>
+      <button class="btn primary" type="button" id="cat-add">+ 품목 직접 추가</button>
+      <button class="btn" type="button" id="cat-hidden">삭제한 품목</button>
       <button class="btn" type="button" id="cat-reset">기본값으로</button>
       <button class="iconbtn" type="button" id="cat-close" aria-label="닫기">✕</button>
     </div>
@@ -370,7 +374,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <table class="cattable">
         <thead><tr>
           <th style="width:27%">예약 상품명</th><th style="width:20%">견적서 품명</th><th style="width:11%">구분</th>
-          <th style="width:11%">발급</th><th style="width:13%">정상가</th><th style="width:9%">할인 대상</th><th style="width:44px"></th>
+          <th style="width:11%">발급</th><th style="width:13%">정상가</th><th style="width:9%">할인 대상</th><th style="width:64px"></th>
         </tr></thead>
         <tbody id="cat-body"></tbody>
       </table>
@@ -403,10 +407,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "18일 공연 관계사청구|7500000|7500000|0",
     "19일 공연 계좌송금건|8211000|8211000|0",
     "19일 공연 관계사청구|62752000|62752000|0",
-    "2026 JAZZ : LOSA(A석)|||0",
-    "2026 JAZZ : LOSA(R석)|||0",
-    "2026 JAZZ : LOSA(S석)-가가빈빈|||0",
-    "2026 JAZZ : LOSA(S석)-요요빈빈|||0",
     "20일 공연 계좌송금건|19998000|19998000|0",
     "20일 공연 관계사청구|7172000|7172000|0",
     "9월 18일 티켓링크 정산금|7550550||0",
@@ -429,11 +429,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "네이버 관람예약(공휴일)|69000|62000|0",
     "네이버 관람예약(주말)|69000|62000|0",
     "네이버 관람예약(평일)|50000|45000|0",
-    "네이버 주말/공휴일 관람(09:00~18:00)|69000|62000|1",
-    "네이버 주말/공휴일 관람(13:00~18:00)|69000|62000|1",
-    "네이버 평일 관람(09:00~18:00)|50000|45000|1",
-    "네이버 평일 관람(13:00~18:00)|50000|45000|1",
-    "다회용관람권(2024)|300000|300000|0",
     "대관|3000000|2500000|0",
     "댄싱웨일 스킨핏 썬|32000|32000|0",
     "덴싱웨일 클렌징 오일|32000|32000|0",
@@ -452,53 +447,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "보자기 포장(모과청)|5000|5000|0",
     "복태|38000|21000|0",
     "브로슈어|28000|28000|0",
-    "사랑의찬가 공연 좌석(단품)|45900|45900|0",
-    "사랑의찬가 공연(A석)|||0",
-    "사랑의찬가 공연(R석)|||0",
     "사야국제음악제 티켓링크 정산|31816310||0",
-    "사야국제음악제(낮공연 A석)-19일|||0",
-    "사야국제음악제(낮공연 A석)-20일|||0",
-    "사야국제음악제(낮공연 B석)-19일|||0",
-    "사야국제음악제(낮공연 B석)-20일|||0",
-    "사야국제음악제(저녁공연 A석)|||0",
-    "사야국제음악제(저녁공연 B석)|||0",
-    "사야국제음악제(저녁공연 S석)|||0",
-    "사야국제음악제(저녁공연 VIP석)|||0",
-    "사운드 워킹(주말)|99000|92000|1",
-    "사운드 워킹(평일)|80000|75000|1",
     "사운드워킹|30000|30000|0",
-    "사유원 관람권|69000|69000|0",
-    "사유원 관람식사권|169000|169000|0",
-    "사유원 동행 산책 : 여름사색(주말)|99000|99000|0",
-    "사유원 동행 산책 : 여름사색(평일)|80000|80000|0",
-    "사유원 새벽 해오름 산책 동대구역 셔틀 패키지(주말)|179000|179000|0",
-    "사유원 새벽 해오름 산책 동대구역 셔틀 패키지(주말)-12월|179000|179000|0",
-    "사유원 새벽 해오름 산책 동대구역 셔틀 패키지(평일)|160000|160000|0",
-    "사유원 새벽 해오름 산책 동대구역 셔틀 패키지(평일)-12월|160000|160000|0",
-    "사유원 새벽 해오름 산책(주말)|139000|139000|0",
-    "사유원 새벽 해오름 산책(주말)-12월|139000|139000|0",
-    "사유원 새벽 해오름 산책(평일)|120000|120000|0",
-    "사유원 새벽 해오름 산책(평일)-12월|120000|120000|0",
-    "사유원 선셋 다이닝 투어|144000|144000|0",
-    "사유원 선셋 디너-양식(평일)-11월|165000|165000|0",
-    "사유원 선셋 디너-양식(평일)-12월|235000|235000|0",
-    "사유원 선셋 디너-한식(평일)|125000|125000|0",
-    "사유원 선셋 디너-한식(평일)-12월|125000|125000|0",
-    "사유원 심미안 산책|99000|99000|0",
-    "사유원 심미안 산책+사담 디너(11월 25일)|179000|179000|0",
-    "사유원 심미안 산책+사담 디너(12월 2일)|249000|249000|0",
     "사유원 티셔츠(판매용)|40000|30000|0",
     "사유원 패브릭 스프레이|28000|28000|0",
-    "사유원 프라이빗 선셋 투어|130000|130000|0",
     "사유의 노트|18000|22000|0",
     "사유의 밥상(단체)|38000|38000|0",
     "사유의 숨결 세트|11000|11000|0",
     "사유의 저녁: Only Dining|100000|100000|0",
     "사유의 향|35000|35000|0",
     "세미나|1000000|500000|0",
-    "소요의 춤과 선율(A석)|120000|120000|0",
-    "소요의 춤과 선율(R석)|200000|200000|0",
-    "소요의 춤과 선율(S석)|158000|158000|0",
     "소주＆맥주|5000|5000|0",
     "수수료(과세)|10000|5000|0",
     "수수료(면세)|10000|5000|0",
@@ -508,7 +466,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "시자 자화상 에코백|33000|33000|0",
     "아메리카노(가가빈빈)|7000|7000|0",
     "아메리카노(몽몽차방)|5500|5500|0",
-    "아침 산책(07:00~18:00)|69000|62000|1",
     "알바로시자 시계|380000|380000|0",
     "에코백(시자 누드스케치 에코백)|35000|35000|0",
     "와인(무알콜)|60000|60000|0",
@@ -521,7 +478,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "음료쿠폰(몽몽차방)|8000|15000|0",
     "임원도슨트(수정)|1000000|500000|0",
     "주말/공휴일 관람(09:00~18:00)|69000|62000|1",
-    "주말/공휴일 관람(13:00~18:00)|69000|62000|1",
     "주말/공휴일(관람)|69000|62000|1",
     "주말/공휴일(관람, 몽몽마방 사유의 밥상)|107000|100000|0",
     "주말/공휴일(관람, 사담 디너)|149000|134000|1",
@@ -536,7 +492,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "티켓링크 정산금(사랑의찬가)|8731800|8731800|0",
     "패브릭미스트|28000|28000|0",
     "평일 관람(09:00~18:00)|50000|45000|1",
-    "평일 관람(13:00~18:00)|50000|45000|1",
     "평일(관람)|50000|45000|1",
     "평일(관람, 몽몽마방 사유의 밥상)|88000|83000|0",
     "평일(관람, 사담 디너)|130000|117000|1",
@@ -550,7 +505,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "핸드워시|29000|29000|0",
     "핸드워시 타월 세트|50000|29000|0",
     "햄&루꼴라 크로아상|15000|15000|0",
-    "향기 명상 프로그램 '사유의 향'(주말)|104000|97000|0",
     "후드 티셔츠|80000|80000|0"
   ];
 
@@ -1406,21 +1360,32 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       '<td>' + formSel + '</td>' +
       '<td><input class="num" type="number" min="0" step="100" data-f="price" value="' + (it.price == null ? "" : it.price) + '"></td>' +
       '<td style="text-align:center"><input type="checkbox" data-f="disc"' + (it.disc ? ' checked' : '') + '></td>' +
-      '<td><button class="iconbtn" type="button" data-act="del" aria-label="품목 삭제">✕</button></td>' +
+      '<td>' + (it.hidden
+        ? '<button class="btn small" type="button" data-act="restore">복원</button>'
+        : '<button class="btn small danger" type="button" data-act="del">삭제</button>') + '</td>' +
     '</tr>';
   }
 
+  // 삭제한 품목은 지우지 않고 숨겨 두어 "삭제한 품목"에서 다시 살릴 수 있다
+  var showHidden = false;
   function renderCatalog(){
     var q = normName(document.getElementById("cat-search").value).toLowerCase();
     var items = CATALOG.filter(function(it){
-      if(it.sys || it.hidden) return false;
+      if(it.sys || !!it.hidden !== showHidden) return false;
       return !q || (normName(it.src) + normName(it.name)).toLowerCase().indexOf(q) >= 0;
     });
     // 추가한 품목이 위로
     items.sort(function(a, b){ return (a.def ? 1 : 0) - (b.def ? 1 : 0); });
     document.getElementById("cat-body").innerHTML = items.map(catRowHTML).join("") ||
-      '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--muted)">찾는 품목이 없습니다.</td></tr>';
-    document.getElementById("cat-count").textContent = "· " + CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length + "개";
+      '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--muted)">' +
+      (showHidden ? '삭제한 품목이 없습니다.' : '찾는 품목이 없습니다.') + '</td></tr>';
+    var live = CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length;
+    var gone = CATALOG.filter(function(it){ return !it.sys && it.hidden; }).length;
+    document.getElementById("cat-count").textContent = "· " + live + "개";
+    var t = document.getElementById("cat-hidden");
+    t.textContent = showHidden ? "← 품목 목록으로" : "삭제한 품목 (" + gone + ")";
+    t.disabled = !showHidden && !gone;
+    document.getElementById("cat-add").hidden = showHidden;
   }
 
   function onCatEdit(e){
@@ -1442,18 +1407,26 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(e.target.type === "text" || e.target.type === "number") onCatEdit(e);
   });
   document.getElementById("cat-body").addEventListener("click", function(e){
-    var b = e.target.closest('[data-act="del"]'); if(!b) return;
+    var b = e.target.closest("[data-act]"); if(!b) return;
     var id = b.closest("tr").getAttribute("data-id"), it = product(id);
-    if(!confirm('"' + (it.src || it.name || "새 품목") + '" 품목을 지울까요?')) return;
-    if(id.indexOf("u:") === 0) catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
-    else { setCat(id, "hidden", true); }
-    saveCatEdits(); buildCatalog(); renderCatalog();
+    if(b.getAttribute("data-act") === "restore"){ setCat(id, "hidden", false); renderCatalog(); return; }
+    // 아무것도 적지 않은 새 품목은 바로 지운다
+    if(id.indexOf("u:") === 0 && !it.src && !it.name){
+      catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
+      saveCatEdits(); buildCatalog(); renderCatalog(); return;
+    }
+    if(!confirm('"' + (it.src || it.name) + '" 품목을 삭제할까요? "삭제한 품목"에서 다시 살릴 수 있습니다.')) return;
+    setCat(id, "hidden", true); renderCatalog();
+  });
+  document.getElementById("cat-hidden").addEventListener("click", function(){
+    showHidden = !showHidden; renderCatalog();
   });
   document.getElementById("cat-search").addEventListener("input", renderCatalog);
   document.getElementById("cat-add").addEventListener("click", function(){
     catEdits.added = catEdits.added || [];
     catEdits.added.unshift({ uid: Date.now(), src:"", name:"", kind:"item", form:"shilla", price:null, disc:false });
     saveCatEdits(); buildCatalog();
+    showHidden = false;
     document.getElementById("cat-search").value = "";
     renderCatalog();
     var first = document.querySelector('#cat-body input[data-f="src"]'); if(first) first.focus();
@@ -1465,7 +1438,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function closeCatalog(){ elCat.hidden = true; renderRows(); renderDoc(); }
   document.getElementById("open-catalog").addEventListener("click", function(){
     document.getElementById("cat-search").value = "";
-    renderCatalog(); elCat.hidden = false;
+    showHidden = false; renderCatalog(); elCat.hidden = false;
     document.getElementById("cat-search").focus();
   });
   document.getElementById("cat-close").addEventListener("click", closeCatalog);
