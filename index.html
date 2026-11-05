@@ -128,6 +128,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 /* ---------- preview ---------- */
 .previewpane{display:flex; flex-direction:column; gap:22px; min-width:0}
 .sheetwrap{min-width:0}
+/* 넓은 화면: 미리보기는 화면에 고정하고 왼쪽 입력란만 스크롤. 견적서는 세로 전체가 보이게 줄이고, 두 장이면 나란히 */
+@media (min-width:981px){
+  .previewpane{position:sticky; top:16px; height:calc(100vh - 100px); flex-direction:row; align-items:flex-start; gap:18px; overflow:hidden}
+  .sheetwrap{flex:1 1 0}
+}
 .sheetlabel{
   font-size:11.5px; letter-spacing:.07em; color:var(--muted); margin-bottom:8px;
   display:flex; align-items:center; gap:8px;
@@ -177,12 +182,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   border-top:1px solid #999; padding-top:10px;
 }
 .warn{font-size:12px; color:var(--danger); margin-top:6px}
-.okline{font-size:12px; color:var(--accent); margin-top:6px}
+#editarea{margin-top:16px}
+#editarea + .panel, #toggle-edit + #editarea[hidden] + .panel{margin-top:16px}
 .seg{display:flex; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden}
-.seg button{flex:1; border:0; background:var(--surface); padding:9px 8px; cursor:pointer; font-size:13px; color:var(--ink)}
+.moderow{display:flex; gap:8px}
+.moderow .seg{flex:1; min-width:0}
+.seg button{flex:1; border:0; background:var(--surface); padding:7px 4px; cursor:pointer; font-size:12px; color:var(--ink); white-space:nowrap}
 .seg button + button{border-left:1px solid var(--line-strong)}
 .seg button.on{background:var(--accent); color:#fff; font-weight:700}
-.parsed{font-size:12px; color:var(--muted); margin:6px 0 0; padding-left:16px}
 .empty{
   border:1px dashed var(--line-strong); border-radius:10px; padding:26px; text-align:center;
   color:var(--muted); font-size:13px; background:var(--surface);
@@ -210,7 +217,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <div class="body">
           <div class="field">
             <textarea id="f-raw" style="min-height:150px;font-size:12.5px" placeholder="예약 시스템의 '상품 정보'를 그대로 붙여넣으세요&#10;방문일자(순번)	2026.11.09 (24)&#10;상품정보	평일 관람(13:00~18:00)&#10;예약인원	18명(어른 : 18명)&#10;..."></textarea>
-            <span class="hint">자동으로 채운 뒤 아래 내용을 확인 · 수정하고 저장하세요</span>
           </div>
           <div class="addrow">
             <button class="btn primary wide" type="button" id="parse">자동 채우기</button>
@@ -223,17 +229,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <h2>기본 정보</h2>
         <div class="body">
           <div class="field">
-            <label>문서</label>
-            <div class="seg" id="m-doc">
-              <button type="button" data-v="quote">견적서</button>
-              <button type="button" data-v="statement">거래명세서</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>결제</label>
-            <div class="seg" id="m-pay">
-              <button type="button" data-v="online">인터넷 결제</button>
-              <button type="button" data-v="site">현장 결제</button>
+            <label>문서 · 결제</label>
+            <div class="moderow">
+              <div class="seg" id="m-doc">
+                <button type="button" data-v="quote">견적서</button>
+                <button type="button" data-v="statement">거래명세서</button>
+              </div>
+              <div class="seg" id="m-pay">
+                <button type="button" data-v="online">인터넷 결제</button>
+                <button type="button" data-v="site">현장 결제</button>
+              </div>
             </div>
             <span class="hint" id="m-pay-hint"></span>
           </div>
@@ -274,27 +279,32 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         </div>
       </section>
 
-      <section class="panel">
-        <h2>품목 <span id="itemcount" style="font-weight:500;letter-spacing:0"></span></h2>
-        <div class="body">
-          <div id="rows" style="display:flex;flex-direction:column;gap:12px"></div>
-          <div class="addrow">
-            <button class="btn wide" type="button" id="add-view">+ 관람</button>
-            <button class="btn wide" type="button" id="add-food">+ 식음·프로그램</button>
-          </div>
-          <div id="rowwarn"></div>
-        </div>
-      </section>
+      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">견적서 수정하기</button>
 
-      <section class="panel">
-        <h2>하단 안내문구 (선택)</h2>
-        <div class="body">
-          <div class="field">
-            <textarea id="f-footnote" placeholder="예: 상기 금액은 발행일 기준이며, 인원 변동 시 금액이 조정될 수 있습니다."></textarea>
-            <span class="hint">비워두면 견적서에 인쇄되지 않습니다</span>
+      <!-- 품목 · 안내문구는 필요할 때만 펼친다 -->
+      <div id="editarea" hidden>
+        <section class="panel">
+          <h2>품목 <span id="itemcount" style="font-weight:500;letter-spacing:0"></span></h2>
+          <div class="body">
+            <div id="rows" style="display:flex;flex-direction:column;gap:12px"></div>
+            <div class="addrow">
+              <button class="btn wide" type="button" id="add-view">+ 관람</button>
+              <button class="btn wide" type="button" id="add-food">+ 식음·프로그램</button>
+            </div>
+            <div id="rowwarn"></div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section class="panel">
+          <h2>하단 안내문구 (선택)</h2>
+          <div class="body">
+            <div class="field">
+              <textarea id="f-footnote" placeholder="예: 상기 금액은 발행일 기준이며, 인원 변동 시 금액이 조정될 수 있습니다."></textarea>
+              <span class="hint">비워두면 견적서에 인쇄되지 않습니다</span>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <section class="panel">
         <h2>합계</h2>
@@ -377,13 +387,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(form === "sayuwon" && state.payMode === "online") return "㈜사유원 · 인터넷 결제 (전체 품목)";
     return COMPANY[form].sheetLabel;
   }
-  var MODE_KEY = "sy_mode";
-  function loadMode(){
-    try { return JSON.parse(localStorage.getItem(MODE_KEY) || "{}"); } catch(e){ return {}; }
-  }
-  function saveMode(){
-    try { localStorage.setItem(MODE_KEY, JSON.stringify({ docType: state.docType, payMode: state.payMode })); } catch(e){}
-  }
   function docName(){ return DOC_NAME[state.docType] || DOC_NAME.quote; }
   function product(id){ for(var i=0;i<PRODUCTS.length;i++){ if(PRODUCTS[i].id===id) return PRODUCTS[i]; } return PRODUCTS[0]; }
 
@@ -411,7 +414,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       client: "", clientMgr: "",
       useDate: "", useDateText: "", quoteDate: todayISO(),
       sender: loadSender(), pax: null,
-      footnote: "", rows: [], docType: loadMode().docType || "quote", payMode: loadMode().payMode || "site"
+      footnote: "", rows: [], docType: "quote", payMode: "online"   // 기본: 견적서 · 인터넷 결제
     };
     state.rows.push(makeRow("view_wd"));
     state.rows.push(makeRow("sadam"));
@@ -685,11 +688,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     updateButtons();
   }
 
+  var wideQuery = window.matchMedia("(min-width:981px)");
   function fitSheets(){
     var boxes = elPreview.querySelectorAll(".scaler");
     for(var i=0;i<boxes.length;i++){
       var w = boxes[i].clientWidth || 794;
-      var z = Math.min(1, w / 794);
+      // 넓은 화면에서는 고정된 미리보기 높이 안에 견적서 한 장이 통째로 들어가게
+      var h = wideQuery.matches ? elPreview.getBoundingClientRect().bottom - boxes[i].getBoundingClientRect().top - 4 : Infinity;
+      var z = Math.min(1, w / 794, h / 1123);
       var inner = boxes[i].firstElementChild;
       inner.style.transform = "scale(" + z + ")";
       boxes[i].style.height = (1123 * z) + "px";
@@ -763,11 +769,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
   };
 
+  // 예: 사유원_견적서_김수진_20261105.pdf (두 장을 한 파일로 받으면 사유원_신라철강_…)
   function fileName(forms){
-    var who = (state.client.trim() || "견적").replace(/[\\/:*?"<>|]/g, " ").trim();
+    var who = (state.client.trim() || "수신").replace(/[\\/:*?"<>|]/g, " ").trim();
     var d = (state.quoteDate || todayISO()).replace(/-/g, "");
-    var tail = forms.length === 1 ? (forms[0] === "sayuwon" ? "_사유원" : "_신라철강") : "";
-    return docName() + "_" + who + tail + "_" + d + ".pdf";
+    var issuer = forms.map(function(f){ return f === "sayuwon" ? "사유원" : "신라철강"; }).join("_");
+    return issuer + "_" + docName() + "_" + who + "_" + d + ".pdf";
   }
 
   var busy = false;
@@ -1122,15 +1129,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
     var booked = res.blocks.reduce(function(s,b){ return s + (b.amount || b.price); }, 0);
     var made = totalOf("sayuwon") + totalOf("shilla");
-    var list = '<ul class="parsed">' + res.blocks.map(function(b){
-      return '<li>' + esc(fmtDate(b.date, true)) + ' · ' + esc(b.product) + ' · ' + b.qty + '명 · ' + won(b.amount || b.price) + '원</li>';
-    }).join("") + '</ul>';
-    info.innerHTML = list +
-      (made === booked
-        ? '<div class="okline">예약 금액 합계 ' + won(booked) + '원과 일치합니다.</div>'
-        : '<div class="warn">견적 합계 ' + won(made) + '원 / 예약 금액 ' + won(booked) + '원 (차이 ' + won(made - booked) + '원)</div>') +
-      warns.map(function(w){ return '<div class="warn">' + esc(w) + '</div>'; }).join("") +
-      (state.client.trim() ? '' : '<div class="warn">수신 (거래처명)을 입력해 주세요.</div>');
+    // 문제가 있을 때만 알린다
+    if(made !== booked) warns.unshift("견적 합계 " + won(made) + "원 / 예약 금액 " + won(booked) + "원 (차이 " + won(made - booked) + "원)");
+    info.innerHTML = warns.map(function(w){ return '<div class="warn">' + esc(w) + '</div>'; }).join("");
+    if(warns.length) setEditOpen(true);   // 확인할 게 있으면 품목란을 펼쳐 둔다
   }
 
   // ---------- wiring ----------
@@ -1157,7 +1159,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById(id).addEventListener("click", function(e){
       var v = e.target.getAttribute && e.target.getAttribute("data-v");
       if(!v) return;
-      state[key] = v; saveMode(); paintModes(); renderRows(); renderDoc();
+      state[key] = v; paintModes(); renderRows(); renderDoc();
     });
   }
 
@@ -1191,12 +1193,22 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   bindField("f-pax", "pax", { num:true, after: applyPax });
   bindField("f-footnote", "footnote");
 
+  function setEditOpen(open){
+    document.getElementById("editarea").hidden = !open;
+    var b = document.getElementById("toggle-edit");
+    b.textContent = open ? "견적서 수정 닫기" : "견적서 수정하기";
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  document.getElementById("toggle-edit").addEventListener("click", function(){
+    setEditOpen(document.getElementById("editarea").hidden);
+  });
   document.getElementById("add-view").addEventListener("click", function(){
     state.rows.push(makeRow("view_wd")); renderRows(); renderDoc();
   });
   document.getElementById("add-food").addEventListener("click", function(){
     state.rows.push(makeRow("sadam")); renderRows(); renderDoc();
   });
+
   document.getElementById("reset").addEventListener("click", function(){
     defaultState(); paint(); status("");
   });
