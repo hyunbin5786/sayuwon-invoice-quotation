@@ -324,7 +324,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <section class="panel" id="fakepanel" hidden>
         <h2>외부용 품목 바꾸기</h2>
         <div class="body">
-          <span class="hint">관람은 바꿀 수 없습니다. 바꿀 품목을 고르면 수량을 자동으로 정하고, 내부용보다 늘어난 금액은 ‘할인’ 줄로 맞춥니다. 단가는 품목 관리 가격 그대로입니다.</span>
+          <span class="hint">관람은 바꿀 수 없습니다. 한 품목을 여러 품목으로 바꿀 수 있고, 할인이 가장 적게 나오도록 수량을 자동으로 정합니다. 내부용보다 늘어난 금액은 ‘할인’ 줄로 맞추고, 단가는 품목 관리 가격 그대로입니다.</span>
           <div id="swaplist" style="display:flex;flex-direction:column;gap:10px"></div>
           <div id="swapsum" class="summary"></div>
         </div>
@@ -369,9 +369,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <div class="body">
           <button class="btn primary block" type="button" id="out-real">출력</button>
           <button class="btn primary block" type="button" id="out-fake" hidden>외부용 출력</button>
-          <span class="hint">PDF(사유원 · 신라철강 모두)와 엑셀이 함께 저장됩니다</span>
-          <div class="status" id="status" aria-live="polite"></div>
           <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
+          <div class="status" id="status" aria-live="polite"></div>
         </div>
       </section>
     </div>
@@ -715,12 +714,26 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return CATALOG.filter(function(p){ return !p.sys && !p.hidden && p.src && (p.kind === "food" || p.kind === "goods") && Number(p.price) > 0; })
       .sort(function(a, b){ return (rank(a) - rank(b)) || byKind(a, b); });
   }
-  // 남은 금액을 넘기는 가장 작은 수량. 단가가 남은 금액보다 크면 1, 인원수로 넘기면 인원수
-  function autoQty(r, price, remain){
-    var q = Number(r.qty) || 1;
-    if(remain <= 0 || price >= remain) return 1;
-    if(price * q >= remain) return q;
-    return Math.ceil(remain / price);
+  // 바꾼 품목들의 수량을 정한다: 각 1개 이상, 합계가 원래 금액 이상이면서 할인(넘치는 금액)이 가장 작게
+  function optimizeQtys(lines, target){
+    var prices = lines.map(function(l){ return Number(product(l.pid).price) || 0; });
+    if(!prices.length || prices.some(function(p){ return p <= 0; })) return;
+    var n = prices.length, q = prices.map(function(){ return 1; });
+    var best = null, bestQ = null, steps = 0;
+    function rest(i){ var s = 0; for(var j=i; j<n; j++) s += prices[j]; return s; }
+    (function rec(i, sum){
+      if(++steps > 200000 || best === target) return;
+      if(i === n - 1){
+        var k = Math.max(1, Math.ceil((target - sum) / prices[i]));
+        var tot = sum + k * prices[i];
+        if(best === null || tot < best){ best = tot; q[i] = k; bestQ = q.slice(); }
+        return;
+      }
+      // 이 품목을 더 늘려도 남은 품목을 1개씩만 넣어 이미 넘으면 그 이상은 볼 필요 없음
+      var maxK = Math.max(1, Math.ceil((target - sum - rest(i + 1)) / prices[i]));
+      for(var k=1; k<=maxK; k++){ q[i] = k; rec(i + 1, sum + k * prices[i]); }
+    })(0, 0);
+    if(bestQ) lines.forEach(function(l, i){ l.qty = bestQ[i]; });
   }
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
   // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
@@ -854,28 +867,21 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var line = el.closest(".swapline");
       return { r:r, i: line ? Number(line.getAttribute("data-i")) : -1 };
     }
-    // 이 행에서 아직 덮지 못한 금액
-    function remainFor(r, skip){
-      var lines = state.swaps[r.key] || [];
-      return amount(r) - lines.reduce(function(s,l,i){ return s + (i === skip ? 0 : swapLineAmount(l)); }, 0);
-    }
+    // 품목을 더하거나 빼거나 바꾸면, 그 행의 바꾼 품목 수량을 모두 다시 맞춘다 (할인 최소)
     list.addEventListener("click", function(e){
       var b = e.target.closest("[data-sw]"); if(!b || b.tagName !== "BUTTON") return;
       var c = ctx(b); if(!c.r) return;
       var lines = state.swaps[c.r.key] = state.swaps[c.r.key] || [];
-      if(b.getAttribute("data-sw") === "add"){
-        var p = swapOptions()[0];
-        lines.push({ pid: p.id, qty: autoQty(c.r, p.price, remainFor(c.r, -1)) });
-      } else {
-        lines.splice(c.i, 1);
-      }
+      if(b.getAttribute("data-sw") === "add") lines.push({ pid: swapOptions()[0].id, qty: 1 });
+      else lines.splice(c.i, 1);
+      optimizeQtys(lines, amount(c.r));
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("change", function(e){
       if(e.target.getAttribute("data-sw") !== "pid") return;
-      var c = ctx(e.target), l = state.swaps[c.r.key][c.i], p = product(e.target.value);
-      l.pid = p.id;
-      l.qty = autoQty(c.r, p.price, remainFor(c.r, c.i));   // 품목을 바꾸면 수량 자동
+      var c = ctx(e.target), lines = state.swaps[c.r.key];
+      lines[c.i].pid = e.target.value;
+      optimizeQtys(lines, amount(c.r));
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("input", function(e){
