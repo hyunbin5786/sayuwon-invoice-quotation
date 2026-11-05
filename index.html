@@ -366,7 +366,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <input id="cat-search" type="search" placeholder="품목 검색">
       <button class="btn primary" type="button" id="cat-add">+ 품목 직접 추가</button>
       <button class="btn danger" type="button" id="cat-bulk" disabled>선택 삭제</button>
-      <button class="btn" type="button" id="cat-hidden">삭제한 품목</button>
       <button class="btn" type="button" id="cat-reset">기본값으로</button>
       <button class="iconbtn" type="button" id="cat-close" aria-label="닫기">✕</button>
     </div>
@@ -523,7 +522,20 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var pkg = src.match(/\(관람,\s*([^)]*)\)/);
     if(pkg) return { kind:"package", form:"shilla", name: pkg[1].replace(/\d부$/, "").trim(), weekend: /주말|공휴일/.test(src) };
     if(isViewName(src)) return { kind:"view", form:"sayuwon", name: /주말|공휴일/.test(src) ? "주말 관람" : "평일 관람" };
-    return { kind:"item", form: /관람권/.test(src) ? "sayuwon" : "shilla", name: src.replace(/\((수정|변경)\)/g, "").trim() };
+    return { kind: GOODS[src] ? "goods" : "food", form: /관람권/.test(src) ? "sayuwon" : "shilla", name: src.replace(/\((수정|변경)\)/g, "").trim() };
+  }
+  // 예약 시스템에서 '굿즈'로 묶인 상품과 판매용 물품
+  var GOODS = {};
+  ["스프링 앳 가든 디퓨저","고추장","고추장＆된장 세트","구골목서","내심낙원 미니어쳐","댄싱웨일 스킨핏 썬",
+   "덴싱웨일 클렌징 오일","된장","모과 북마크","모과 생과","모과 티백","모과 풍경","모과청(new)",
+   "보자기 포장(모과청)","복태","브로슈어","사유원 티셔츠(판매용)","사유원 패브릭 스프레이","사유의 노트",
+   "사유의 숨결 세트","시자 자화상 에코백","알바로시자 시계","에코백(시자 누드스케치 에코백)","패브릭미스트",
+   "핸드워시","핸드워시 타월 세트","후드 티셔츠"].forEach(function(n){ GOODS[n] = true; });
+  // 구분 순서: 관람 → 관람+식사 → 식사 → 굿즈
+  var KIND_LABEL = { view:"관람", package:"관람+식사", food:"식사", goods:"굿즈" };
+  var KIND_ORDER = { view:0, package:1, food:2, goods:3 };
+  function byKind(a, b){
+    return (KIND_ORDER[a.kind] - KIND_ORDER[b.kind]) || String(a.src).localeCompare(String(b.src), "ko");
   }
 
   // 품목 관리에서 바꾼 내용은 이 브라우저에만 저장: { edits:{예약상품명:{…}}, added:[{uid,…}] }
@@ -547,12 +559,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     });
     (catEdits.added || []).forEach(function(a){ list.push(Object.assign({ id:"u:" + a.uid }, a)); });
     list.forEach(function(it){
+      if(!KIND_LABEL[it.kind]) it.kind = GOODS[it.src] ? "goods" : "food";   // 예전 '일반' 구분
       if(it.kind === "view") it.form = "sayuwon";
       if(it.kind === "package") it.form = "shilla";
     });
     // 직접 입력용
     list.push({ id:"etc_view", src:"", sys:true, kind:"view", form:"sayuwon", name:"", price:null, disc:true, label:"관람 · 기타 (직접 입력)" });
-    list.push({ id:"etc_item", src:"", sys:true, kind:"item", form:"shilla", name:"", price:null, disc:false, label:"기타 (직접 입력)" });
+    list.push({ id:"etc_item", src:"", sys:true, kind:"food", form:"shilla", name:"", price:null, disc:false, label:"기타 (직접 입력)" });
     CATALOG = list;
   }
   buildCatalog();
@@ -694,6 +707,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   function optionsFor(form){
     return CATALOG.filter(function(p){ return p.form === form && !p.hidden && (p.sys || p.src); })
+      .sort(function(a, b){ return (a.sys ? 1 : 0) - (b.sys ? 1 : 0) || byKind(a, b); })
       .map(function(p){
         var u = unitPrice(p);
         return '<option value="'+esc(p.id)+'">'+esc(p.label || p.src)+(u != null ? ' · ' + won(u) + '원' : '')+'</option>';
@@ -1269,7 +1283,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       rows.push(v, f);
     } else if(hit){
       var r = placeRow(hit.id, qty);
-      if(hit.kind === "item" && unit != null) r.price = unit;   // 일반 품목은 실제 판매 단가 그대로
+      if(hit.kind !== "view" && unit != null) r.price = unit;   // 식사·굿즈는 실제 판매 단가 그대로
       if(r.price == null && unit != null) r.price = unit;
       rows.push(r);
     } else {
@@ -1337,7 +1351,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
 
   // ---------- 품목 관리 ----------
-  var KIND_LABEL = { view:"관람", package:"관람+식사", item:"일반" };
   var elCat = document.getElementById("catalog-modal");
 
   // 바꾼 값 저장: 기본 품목은 예약 상품명 기준으로, 추가한 품목은 그 자체를 고친다
@@ -1352,10 +1365,18 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     saveCatEdits(); buildCatalog();
   }
+  // 삭제: 추가한 품목은 지우고, 기본 품목은 목록에서 뺀다 ("기본값으로"를 누르면 돌아옴)
+  function removeCat(id){
+    if(id.indexOf("u:") === 0){
+      catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
+      saveCatEdits(); buildCatalog();
+    } else setCat(id, "hidden", true);
+  }
 
   function catRowHTML(it){
     var u = it.kind === "package" ? unitPrice(it) : null;
-    var formSel = '<select data-f="form"' + (it.kind !== "item" ? ' disabled' : '') + '>' +
+    var fixedForm = it.kind === "view" || it.kind === "package";
+    var formSel = '<select data-f="form"' + (fixedForm ? ' disabled' : '') + '>' +
       '<option value="sayuwon"' + (it.form === "sayuwon" ? ' selected' : '') + '>사유원</option>' +
       '<option value="shilla"' + (it.form === "shilla" ? ' selected' : '') + '>신라철강</option></select>';
     var kindSel = '<select data-f="kind">' + Object.keys(KIND_LABEL).map(function(k){
@@ -1369,14 +1390,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       '<td>' + formSel + '</td>' +
       '<td><input class="num" type="number" min="0" step="100" data-f="price" value="' + (it.price == null ? "" : it.price) + '"></td>' +
       '<td style="text-align:center"><input type="checkbox" data-f="disc"' + (it.disc ? ' checked' : '') + '></td>' +
-      '<td>' + (it.hidden
-        ? '<button class="btn small" type="button" data-act="restore">복원</button>'
-        : '<button class="btn small danger" type="button" data-act="del">삭제</button>') + '</td>' +
+      '<td><button class="btn small danger" type="button" data-act="del">삭제</button></td>' +
     '</tr>';
   }
 
-  // 삭제한 품목은 지우지 않고 숨겨 두어 "삭제한 품목"에서 다시 살릴 수 있다
-  var showHidden = false;
   var picked = {};   // 체크한 품목 id
   function visibleIds(){
     return [].map.call(document.querySelectorAll("#cat-body tr[data-id]"), function(tr){ return tr.getAttribute("data-id"); });
@@ -1385,9 +1402,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function syncPicks(){
     var n = Object.keys(picked).length, vis = visibleIds();
     var b = document.getElementById("cat-bulk");
-    b.textContent = (showHidden ? "선택 복원" : "선택 삭제") + (n ? " (" + n + ")" : "");
+    b.textContent = "선택 삭제" + (n ? " (" + n + ")" : "");
     b.disabled = !n;
-    b.classList.toggle("danger", !showHidden);
     var all = document.getElementById("cat-selall"), on = vis.filter(function(id){ return picked[id]; }).length;
     all.checked = vis.length > 0 && on === vis.length;
     all.indeterminate = on > 0 && on < vis.length;
@@ -1395,21 +1411,17 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function renderCatalog(){
     var q = normName(document.getElementById("cat-search").value).toLowerCase();
     var items = CATALOG.filter(function(it){
-      if(it.sys || !!it.hidden !== showHidden) return false;
+      if(it.sys || it.hidden) return false;
       return !q || (normName(it.src) + normName(it.name)).toLowerCase().indexOf(q) >= 0;
     });
-    // 추가한 품목이 위로
-    items.sort(function(a, b){ return (a.def ? 1 : 0) - (b.def ? 1 : 0); });
+    // 막 추가해 비어 있는 품목이 맨 위, 그다음 관람 → 관람+식사 → 식사 → 굿즈
+    items.sort(function(a, b){
+      var ea = !a.def && !a.src ? 0 : 1, eb = !b.def && !b.src ? 0 : 1;
+      return (ea - eb) || byKind(a, b);
+    });
     document.getElementById("cat-body").innerHTML = items.map(catRowHTML).join("") ||
-      '<tr><td colspan="8" style="padding:18px;text-align:center;color:var(--muted)">' +
-      (showHidden ? '삭제한 품목이 없습니다.' : '찾는 품목이 없습니다.') + '</td></tr>';
-    var live = CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length;
-    var gone = CATALOG.filter(function(it){ return !it.sys && it.hidden; }).length;
-    document.getElementById("cat-count").textContent = "· " + live + "개";
-    var t = document.getElementById("cat-hidden");
-    t.textContent = showHidden ? "← 품목 목록으로" : "삭제한 품목 (" + gone + ")";
-    t.disabled = !showHidden && !gone;
-    document.getElementById("cat-add").hidden = showHidden;
+      '<tr><td colspan="8" style="padding:18px;text-align:center;color:var(--muted)">찾는 품목이 없습니다.</td></tr>';
+    document.getElementById("cat-count").textContent = "· " + CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length + "개";
     syncPicks();
   }
 
@@ -1440,22 +1452,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     [].forEach.call(document.querySelectorAll("#cat-body .pick"), function(c){ c.checked = e.target.checked; });
     syncPicks();
   });
-  // 선택한 품목 한꺼번에 삭제(목록) / 복원(삭제한 품목)
+  // 선택한 품목 한꺼번에 삭제
   document.getElementById("cat-bulk").addEventListener("click", function(){
-    var ids = Object.keys(picked).filter(function(id){ var it = product(id); return it.id === id && !!it.hidden === showHidden; });
+    var ids = Object.keys(picked).filter(function(id){ var it = product(id); return it.id === id && !it.hidden; });
     if(!ids.length) return;
-    if(showHidden){
-      ids.forEach(function(id){ setCat(id, "hidden", false); });
-    } else {
-      if(!confirm(ids.length + "개 품목을 삭제할까요? \"삭제한 품목\"에서 다시 살릴 수 있습니다.")) return;
-      ids.forEach(function(id){
-        var it = product(id);
-        if(id.indexOf("u:") === 0 && !it.src && !it.name){
-          catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
-          saveCatEdits(); buildCatalog();
-        } else setCat(id, "hidden", true);
-      });
-    }
+    if(!confirm(ids.length + "개 품목을 삭제할까요?")) return;
+    ids.forEach(removeCat);
     picked = {};
     renderCatalog();
   });
@@ -1465,25 +1467,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("cat-body").addEventListener("click", function(e){
     var b = e.target.closest("[data-act]"); if(!b) return;
     var id = b.closest("tr").getAttribute("data-id"), it = product(id);
+    // 아무것도 적지 않은 새 품목은 묻지 않고 지운다
+    if((it.src || it.name) && !confirm('"' + (it.src || it.name) + '" 품목을 삭제할까요?')) return;
     delete picked[id];
-    if(b.getAttribute("data-act") === "restore"){ setCat(id, "hidden", false); renderCatalog(); return; }
-    // 아무것도 적지 않은 새 품목은 바로 지운다
-    if(id.indexOf("u:") === 0 && !it.src && !it.name){
-      catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
-      saveCatEdits(); buildCatalog(); renderCatalog(); return;
-    }
-    if(!confirm('"' + (it.src || it.name) + '" 품목을 삭제할까요? "삭제한 품목"에서 다시 살릴 수 있습니다.')) return;
-    setCat(id, "hidden", true); renderCatalog();
-  });
-  document.getElementById("cat-hidden").addEventListener("click", function(){
-    showHidden = !showHidden; picked = {}; renderCatalog();
+    removeCat(id); renderCatalog();
   });
   document.getElementById("cat-search").addEventListener("input", renderCatalog);
   document.getElementById("cat-add").addEventListener("click", function(){
     catEdits.added = catEdits.added || [];
-    catEdits.added.unshift({ uid: Date.now(), src:"", name:"", kind:"item", form:"shilla", price:null, disc:false });
+    catEdits.added.unshift({ uid: Date.now(), src:"", name:"", kind:"food", form:"shilla", price:null, disc:false });
     saveCatEdits(); buildCatalog();
-    showHidden = false;
     document.getElementById("cat-search").value = "";
     renderCatalog();
     var first = document.querySelector('#cat-body input[data-f="src"]'); if(first) first.focus();
@@ -1495,7 +1488,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function closeCatalog(){ elCat.hidden = true; renderRows(); renderDoc(); }
   document.getElementById("open-catalog").addEventListener("click", function(){
     document.getElementById("cat-search").value = "";
-    showHidden = false; picked = {}; renderCatalog(); elCat.hidden = false;
+    picked = {}; renderCatalog(); elCat.hidden = false;
     document.getElementById("cat-search").focus();
   });
   document.getElementById("cat-close").addEventListener("click", closeCatalog);
