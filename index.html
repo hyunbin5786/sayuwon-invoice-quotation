@@ -128,9 +128,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 /* ---------- preview ---------- */
 .previewpane{display:flex; flex-direction:column; gap:22px; min-width:0}
 .sheetwrap{min-width:0}
-/* 넓은 화면: 미리보기는 화면에 고정하고 왼쪽 입력란만 스크롤. 견적서는 세로 전체가 보이게 줄이고, 두 장이면 나란히 */
+/* 넓은 화면: 제목과 미리보기는 고정하고 왼쪽 입력 열만 스크롤. 견적서는 세로 전체가 보이게 줄이고, 두 장이면 나란히 */
 @media (min-width:981px){
-  .previewpane{position:sticky; top:16px; height:calc(100vh - 100px); flex-direction:row; align-items:flex-start; gap:18px; overflow:hidden}
+  html, body{height:100%; overflow:hidden}
+  .wrap{height:100vh; display:flex; flex-direction:column; padding-block:18px}
+  header.top{flex:none}
+  .app{flex:1; min-height:0; align-items:stretch}
+  .app > div:first-child{min-height:0; overflow-y:auto; padding-right:8px; padding-bottom:24px}
+  .previewpane{min-height:0; flex-direction:row; align-items:flex-start; gap:18px; overflow:hidden}
   .sheetwrap{flex:1 1 0}
 }
 .sheetlabel{
