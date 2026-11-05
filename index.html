@@ -643,6 +643,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var d = new Date(), tz = d.getTimezoneOffset()*60000;
     return new Date(d.getTime()-tz).toISOString().slice(0,10);
   }
+  // 거래명세서는 언제나 오늘 날짜로 발행, 견적서는 입력한 발행일
+  function issueDate(){ return state.docType === "statement" ? todayISO() : state.quoteDate; }
   // 행은 품목에서 발급처(form)와 할인 대상(disc)을 복사해 갖는다
   function makeRow(id){
     var p = product(id);
@@ -1049,7 +1051,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           '<div>발     신 : <span class="sendname">' + esc(c.name) +
             '<img class="seal" alt="" src="' + SEAL[form] + '"></span></div>' +
           '<div>담     당 : ' + esc(state.sender) + '</div>' +
-          '<div>발 행 일 : ' + esc(fmtDate(state.quoteDate, false)) + '</div>' +
+          '<div>발 행 일 : ' + esc(fmtDate(issueDate(), false)) + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원(' + taxOf(form) + ')</div>' +
@@ -1168,8 +1170,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function validate(kind){
     if(!state.client.trim()) return "수신 거래처명을 입력해 주세요.";
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
-    if(!state.quoteDate) return "발행일을 입력해 주세요.";
-    if(state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
+    if(!issueDate()) return "발행일을 입력해 주세요.";
+    if(state.docType === "quote" && state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
     if(kind === "fake" && fakeShort().length) return "외부용 금액이 내부용보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
     return null;
   }
@@ -1192,7 +1194,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // 외부용을 함께 만들 때만 맨 뒤에 _내부용 / _외부용을 붙여 내부에서 구분한다
   function fileName(tag){
     var who = (state.client.trim() || "수신").replace(/[\\/:*?"<>|]/g, " ").trim();
-    var d = (state.quoteDate || todayISO()).replace(/-/g, "");
+    var d = (issueDate() || todayISO()).replace(/-/g, "");
     return "사유원_" + docName() + "_" + who + "_" + d + (tag ? "_" + tag : "") + ".pdf";
   }
   // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 엑셀 한 개를 함께 저장
@@ -1342,7 +1344,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
                  "이 용 일 : " + useTxt];
     var right = ["발     신 : " + c.name,
                  "담     당 : " + state.sender,
-                 "발 행 일 : " + fmtDate(state.quoteDate, false)];
+                 "발 행 일 : " + fmtDate(issueDate(), false)];
     for(var i=0;i<3;i++){
       ws.getRow(mr+i).height = 30;
       ws.mergeCells(mr+i, C0, mr+i, C0+1);
@@ -1715,6 +1717,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById("m-pay-hint").textContent = state.payMode === "online"
       ? "모든 품목을 ㈜사유원 한 장으로 발급합니다"
       : "관람은 ㈜사유원, 식음 · 프로그램 · 대관은 신라철강㈜으로 나눠 발급합니다";
+    // 거래명세서는 발행일을 오늘로 고정하고 고칠 수 없게 한다
+    var qd = document.getElementById("f-quotedate"), stmt = state.docType === "statement";
+    qd.disabled = stmt;
+    qd.value = issueDate();
+    qd.title = stmt ? "거래명세서는 오늘 날짜로 발행됩니다" : "";
   }
   function bindMode(id, key){
     document.getElementById(id).addEventListener("click", function(e){
@@ -1730,7 +1737,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById("f-clientmgr").value = state.clientMgr;
     document.getElementById("f-usedate").value = state.useDate;
     document.getElementById("f-usedate-text").value = state.useDateText;
-    document.getElementById("f-quotedate").value = state.quoteDate;
     document.getElementById("f-sender").value = state.sender;
     document.getElementById("f-pax").value = state.pax == null ? "" : state.pax;
     document.getElementById("f-footnote").value = state.footnote;
