@@ -244,7 +244,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           <div class="field">
             <label for="f-clientmgr">수신 담당자</label>
             <input id="f-clientmgr" type="text" placeholder="예: 권혁신">
-            <span class="hint">이름만 넣으면 '○○○ 담당자님'으로 표기됩니다</span>
+            <span class="hint">이름만 넣으면 '○○○ 담당자님', 비워두면 '담당자님'으로 표기됩니다</span>
           </div>
           <div class="grid2">
             <div class="field">
@@ -642,7 +642,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       '<div class="meta">' +
         '<div class="col">' +
           '<div>수     신 : ' + esc(state.client) + '</div>' +
-          '<div>담     당 : ' + esc(mgr ? mgr + " 담당자님" : "") + '</div>' +
+          '<div>담     당 : ' + esc(mgr ? mgr + " 담당자님" : "담당자님") + '</div>' +
           '<div>이 용 일 : ' + esc(useTxt) + '</div>' +
         '</div>' +
         '<div class="col right">' +
@@ -875,7 +875,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var useTxt = state.useDateText.trim() || fmtDate(state.useDate, true);
     var mgr = state.clientMgr.trim();
     var left  = ["수     신 : " + state.client,
-                 "담     당 : " + (mgr ? mgr + " 담당자님" : ""),
+                 "담     당 : " + (mgr ? mgr + " 담당자님" : "담당자님"),
                  "이 용 일 : " + useTxt];
     var right = ["발     신 : " + c.name,
                  "담     당 : " + state.sender,
@@ -1114,7 +1114,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     state.useDate = dates[0] || state.useDate;
     // 발행일은 이용일 이전. 이용일 이후 요청이면 발행일 = 이용일
     state.quoteDate = state.useDate && todayISO() > state.useDate ? state.useDate : todayISO();
-    if(res.visitor) state.clientMgr = res.visitor;
+    // 방문자 이름은 수신으로. 수신 담당자는 필요할 때만 직접 입력 (비우면 '담당자님')
+    if(res.visitor) state.client = res.visitor;
     var viewQty = rows.filter(function(r){ return product(r.pid).form === "sayuwon"; }).map(function(r){ return Number(r.qty)||0; });
     state.pax = Math.max.apply(null, viewQty.length ? viewQty : rows.map(function(r){ return Number(r.qty)||0; }));
     paint();
