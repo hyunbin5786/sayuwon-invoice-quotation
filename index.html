@@ -1164,11 +1164,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
   };
 
-  // 예: 사유원_내부용_견적서_김수진_20261105.pdf / 사유원_외부용_견적서_김수진_20261105.pdf
+  // 예: 사유원_견적서_김수진_20261105.pdf
+  // 외부용을 함께 만들 때만 맨 뒤에 _내부용 / _외부용을 붙여 내부에서 구분한다
   function fileName(tag){
     var who = (state.client.trim() || "수신").replace(/[\\/:*?"<>|]/g, " ").trim();
     var d = (state.quoteDate || todayISO()).replace(/-/g, "");
-    return "사유원_" + tag + "_" + docName() + "_" + who + "_" + d + ".pdf";
+    return "사유원_" + docName() + "_" + who + "_" + d + (tag ? "_" + tag : "") + ".pdf";
   }
   // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 같은 내용의 엑셀 한 개를 함께 저장
   // kind = "real"(내부용) | "fake"(외부용)
@@ -1180,7 +1181,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!window.html2canvas || !window.jspdf){ status("PDF 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err"); return; }
 
     var rows = kind === "fake" ? fakeRows() : state.rows;
-    var tag = kind === "fake" ? "외부용" : "내부용";
+    var tag = state.docUse === "fake" ? (kind === "fake" ? "외부용" : "내부용") : "";
     var sheets = withRows(rows, function(){
       return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
     });
