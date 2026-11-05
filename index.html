@@ -1070,7 +1070,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function renderDoc(){
     var forms = activeForms();
     if(!forms.length){
-      elPreview.innerHTML = '<div class="empty">품목을 추가하면 여기에 견적서가 나타납니다.</div>';
+      elPreview.innerHTML = "";   // 품목이 없으면 오른쪽은 비워 둔다
     } else {
       var fake = state.docUse === "fake";
       var wrap = function(label, html){
