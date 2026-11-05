@@ -579,7 +579,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       it.src = src; it.def = true; it.id = "c:" + src;
       it.price = c[1] ? Number(c[1]) : null;
       it.disc = c[3] === "1";
+      var base = it.name;
       if(edits[src]) Object.assign(it, edits[src]);
+      if(!String(it.name || "").trim()) it.name = base;   // 품명을 비워 두면 기본 품명
       list.push(it);
     });
     (catEdits.added || []).forEach(function(a){ list.push(Object.assign({ id:"u:" + a.uid }, a)); });
@@ -600,12 +602,15 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return product("etc_item");
   }
   function findBySrc(text){
-    var t = normName(text);
+    var t = normName(text), hiddenHit = null;
     for(var i=0;i<CATALOG.length;i++){
       var it = CATALOG[i];
-      if(it.src && !it.hidden && normName(it.src) === t) return it;
+      if(!it.src || normName(it.src) !== t) continue;
+      if(!it.hidden) return it;
+      hiddenHit = hiddenHit || it;
     }
-    return null;
+    // 품목 관리에서 뺀 기본 품목이라도 예약 상품명과 같으면 그대로 인식한다
+    return hiddenHit;
   }
   function baseView(weekend){
     return findBySrc(weekend ? "주말/공휴일(관람)" : "평일(관람)") || product("etc_view");
@@ -1433,14 +1438,20 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function toNum(s){ var m = String(s || "").match(/[\d,]+/); return m ? Number(m[0].replace(/,/g,"")) : 0; }
 
   function parseBooking(text){
-    var blocks = [], cur = null, visitor = null;
+    var blocks = [], cur = null, visitor = null, pending = null;
     String(text).split(/\r?\n/).forEach(function(raw){
       var line = raw.trim();
       if(!line) return;
+      // 항목 이름과 값이 줄바꿈으로 나뉘어 붙여넣어진 경우: 다음 줄을 값으로
+      if(pending && line.charAt(0) !== "*" && !LABELS.some(function(l){ return line.indexOf(l) === 0; })){
+        line = pending + "\t" + line;
+      }
+      pending = null;
       if(line.charAt(0) === "*"){ if(cur) cur.notes.push(line.replace(/^\*\s*/, "")); return; }
       var label = LABELS.filter(function(l){ return line.indexOf(l) === 0; })[0];
       if(!label) return;
       var val = line.slice(label.length).replace(/^[\s:：]+/, "").trim();
+      if(!val){ pending = label; return; }
       if(label.indexOf("방문일자") === 0){
         cur = { date:"", product:"", qty:0, price:0, discount:0, amount:0, notes:[] };
         blocks.push(cur);
@@ -1464,7 +1475,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var p = iso.split("-"), d = new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
     return d.getDay() === 0 || d.getDay() === 6;
   }
-  function cleanName(s){ return s.replace(/\((수정|변경)\)/g, "").replace(/\(\s*\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}\s*\)/g, "").trim(); }
+  function cleanName(s){ return s.replace(/\((수정|변경)\)/g, "").replace(/\s*\d부$/, "").replace(/\(\s*\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}\s*\)/g, "").trim(); }
 
   function placeRow(id, qty){
     var r = makeRow(id);
