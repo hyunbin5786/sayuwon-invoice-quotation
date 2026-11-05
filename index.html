@@ -144,11 +144,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 }
 .sheet .titlebox{text-align:center; padding:4px 0 8px}
 .sheet .titlebox h2{
-  margin:0; font-weight:700; font-size:33px; color:#000; white-space:pre;
+  margin:0; font-weight:700; font-size:30px; color:#000; white-space:pre;
   text-decoration:underline; text-underline-offset:9px; text-decoration-thickness:2px;
 }
 .sheet .meta{display:flex; justify-content:space-between; gap:20px; margin-top:20px}
-.sheet .meta .col{font-size:16px; font-weight:700; line-height:38px; white-space:pre}
+.sheet .meta .col{font-size:14.5px; font-weight:700; line-height:34px; white-space:pre}
 .sheet .meta .col.right{position:relative; padding-right:10px; min-width:318px}
 .sheet .meta .sendname{position:relative; display:inline-block}
 .sheet .meta .seal{
@@ -156,19 +156,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   width:64px; height:auto; pointer-events:none;
 }
 .sheet .amountline{
-  margin-top:16px; font-size:16px; font-weight:700; white-space:pre;
+  margin-top:16px; font-size:14.5px; font-weight:700; white-space:pre;
   padding-bottom:8px; border-bottom:2px solid #000;
 }
 .sheet table{width:100%; border-collapse:collapse; margin-top:14px; table-layout:fixed; border:2px solid #000}
 .sheet th, .sheet td{
-  border:1px solid #000; padding:6px 8px; font-size:14.7px; height:52px;
+  border:1px solid #000; padding:6px 8px; font-size:13.5px; height:52px;
   overflow:hidden; word-break:keep-all; overflow-wrap:anywhere; vertical-align:middle;
 }
-.sheet th{background:#d9d9d9; font-weight:700; font-size:16px; text-align:center; height:46px; white-space:pre}
-.sheet td.note{text-align:center; font-size:13.5px; letter-spacing:-.01em; padding-left:5px; padding-right:5px}
-.sheet td.num{text-align:right; font-variant-numeric:tabular-nums}
+.sheet th{background:#d9d9d9; font-weight:700; font-size:14px; text-align:center; height:46px; white-space:pre}
+.sheet td.note{text-align:center; font-size:12.5px; letter-spacing:-.01em; padding-left:5px; padding-right:5px}
+.sheet td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; overflow-wrap:normal}
 .sheet td.ctr{text-align:center; font-variant-numeric:tabular-nums}
-.sheet tr.total td{background:#d9d9d9; font-weight:700; font-size:16px; height:46px}
+.sheet tr.total td{background:#d9d9d9; font-weight:700; font-size:14.5px; height:46px}
 .sheet tr.total td.label{text-align:center}
 .sheet .vatline{margin-top:10px; text-align:right; font-size:13px; color:#333; font-variant-numeric:tabular-nums}
 .sheet .footnote{
@@ -601,7 +601,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var cols = isSay
       ? ['품  명','수량','정상가','할인가','금 액','비  고']
       : ['품  명','인원, 시간','단가','금 액','비  고'];
-    var widths = isSay ? ['25%','11%','11%','11%','13%','29%'] : ['27%','13%','13%','14%','33%'];
+    var widths = isSay ? ['24%','9%','11%','11%','15%','30%'] : ['26%','12%','13%','16%','33%'];
     var minRows = MIN_ROWS[form];
     var body = "";
     rows.forEach(function(r){
@@ -844,14 +844,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:1,
                    margins:{ left:0.5, right:0.5, top:0.6, bottom:0.6, header:0.3, footer:0.3 } }
     });
-    var widths = isSay ? [1.625,30.625,15.625,11,11,12,42.375] : [1.625,30.625,15.625,12,13,44.5];
+    var widths = isSay ? [1.625,28,11,12,12,14.5,40.5] : [1.625,28,14,13,14.5,44];
     widths.forEach(function(w,i){ ws.getColumn(i+1).width = w; });
 
     function cell(r, col, val, opt){
       var x = ws.getCell(r, col);
       if(val !== undefined && val !== null && val !== "") x.value = val;
       opt = opt || {};
-      x.font = { name:XLFONT, size: opt.size || 11, bold: !!opt.bold, underline: !!opt.underline };
+      x.font = { name:XLFONT, size: opt.size || 10.5, bold: !!opt.bold, underline: !!opt.underline };
       x.alignment = { horizontal: opt.h || "left", vertical:"middle", wrapText: !!opt.wrap };
       if(opt.fill) x.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:GREY } };
       if(opt.border) x.border = opt.border;
@@ -866,7 +866,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     // 제목
     var r = isSay ? 2 : 4;
     ws.mergeCells(r, C0, r+1, CN);
-    cell(r, C0, docTitle(), { size:25, bold:true, underline:true, h:"center" });
+    cell(r, C0, docTitle(), { size:23, bold:true, underline:true, h:"center" });
     [r, r+1, r+2, r+3].forEach(function(i){ ws.getRow(i).height = 24.95; });
     ws.getRow(r+4).height = 30;
 
@@ -883,8 +883,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     for(var i=0;i<3;i++){
       ws.getRow(mr+i).height = 30;
       ws.mergeCells(mr+i, C0, mr+i, C0+1);
-      cell(mr+i, C0, left[i],  { size:12, bold:true });
-      cell(mr+i, CN, right[i], { size:12, bold:true });
+      cell(mr+i, C0, left[i],  { size:11, bold:true });
+      cell(mr+i, CN, right[i], { size:11, bold:true });
     }
     ws.getRow(mr+3).height = 27.75;
 
@@ -892,7 +892,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var ar = mr + 4;
     ws.getRow(ar).height = 27;
     ws.mergeCells(ar, C0, ar, C0+1);
-    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + taxOf(form) + ")", { size:12, bold:true });
+    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + taxOf(form) + ")", { size:11, bold:true });
     for(var col=C0; col<=CN; col++){
       var b = ws.getCell(ar, col);
       b.border = { bottom:{ style:"medium" } };
@@ -907,7 +907,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var nRows = Math.max(rows.length, minRows);
     var lastRow = hr + nRows + 1;
     cols.forEach(function(h, i){
-      cell(hr, C0+i, h, { size:12, bold:true, h:"center", fill:true, border: tb(hr, C0+i, hr, lastRow) });
+      cell(hr, C0+i, h, { size:11, bold:true, h:"center", fill:true, border: tb(hr, C0+i, hr, lastRow) });
     });
 
     var aligns = isSay ? ["left","center","right","right","right","center"]
@@ -932,11 +932,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     ws.getRow(lastRow).height = 30;
     ws.mergeCells(lastRow, C0, lastRow, CN-2);
     for(var col2=C0; col2<=CN; col2++){
-      cell(lastRow, col2, null, { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, col2, hr, lastRow) });
+      cell(lastRow, col2, null, { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, col2, hr, lastRow) });
     }
-    cell(lastRow, C0, "견적금액", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, C0, hr, lastRow) });
-    cell(lastRow, CN-1, total, { size:12, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
-    cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
+    cell(lastRow, C0, "견적금액", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, C0, hr, lastRow) });
+    cell(lastRow, CN-1, total, { size:11, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
+    cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
 
     // 공급가액 / 부가세 · 안내문구
     var after = lastRow + 2;
