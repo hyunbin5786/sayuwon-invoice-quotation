@@ -365,6 +365,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <h2 id="cat-title">품목 관리 <span id="cat-count" class="catcount"></span></h2>
       <input id="cat-search" type="search" placeholder="품목 검색">
       <button class="btn primary" type="button" id="cat-add">+ 품목 직접 추가</button>
+      <button class="btn danger" type="button" id="cat-bulk" disabled>선택 삭제</button>
       <button class="btn" type="button" id="cat-hidden">삭제한 품목</button>
       <button class="btn" type="button" id="cat-reset">기본값으로</button>
       <button class="iconbtn" type="button" id="cat-close" aria-label="닫기">✕</button>
@@ -373,6 +374,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     <div class="catscroll">
       <table class="cattable">
         <thead><tr>
+          <th style="width:34px;text-align:center"><input type="checkbox" id="cat-selall" aria-label="보이는 품목 전체 선택"></th>
           <th style="width:27%">예약 상품명</th><th style="width:20%">견적서 품명</th><th style="width:11%">구분</th>
           <th style="width:11%">발급</th><th style="width:13%">정상가</th><th style="width:9%">할인 대상</th><th style="width:64px"></th>
         </tr></thead>
@@ -1360,6 +1362,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       return '<option value="' + k + '"' + (it.kind === k ? ' selected' : '') + '>' + KIND_LABEL[k] + '</option>';
     }).join("") + '</select>';
     return '<tr data-id="' + esc(it.id) + '">' +
+      '<td style="text-align:center"><input type="checkbox" class="pick" aria-label="선택"' + (picked[it.id] ? ' checked' : '') + '></td>' +
       '<td class="src">' + (it.def ? esc(it.src) : '<input type="text" data-f="src" value="' + esc(it.src) + '" placeholder="예약 시스템 상품명">') + '</td>' +
       '<td><input type="text" data-f="name" value="' + esc(it.name) + '">' + (u != null ? '<span class="sub">식사 단가 ' + won(u) + '원</span>' : '') + '</td>' +
       '<td>' + kindSel + '</td>' +
@@ -1374,6 +1377,21 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   // 삭제한 품목은 지우지 않고 숨겨 두어 "삭제한 품목"에서 다시 살릴 수 있다
   var showHidden = false;
+  var picked = {};   // 체크한 품목 id
+  function visibleIds(){
+    return [].map.call(document.querySelectorAll("#cat-body tr[data-id]"), function(tr){ return tr.getAttribute("data-id"); });
+  }
+  // 선택 개수에 맞춰 일괄 버튼과 전체 선택 상태를 맞춘다
+  function syncPicks(){
+    var n = Object.keys(picked).length, vis = visibleIds();
+    var b = document.getElementById("cat-bulk");
+    b.textContent = (showHidden ? "선택 복원" : "선택 삭제") + (n ? " (" + n + ")" : "");
+    b.disabled = !n;
+    b.classList.toggle("danger", !showHidden);
+    var all = document.getElementById("cat-selall"), on = vis.filter(function(id){ return picked[id]; }).length;
+    all.checked = vis.length > 0 && on === vis.length;
+    all.indeterminate = on > 0 && on < vis.length;
+  }
   function renderCatalog(){
     var q = normName(document.getElementById("cat-search").value).toLowerCase();
     var items = CATALOG.filter(function(it){
@@ -1383,7 +1401,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     // 추가한 품목이 위로
     items.sort(function(a, b){ return (a.def ? 1 : 0) - (b.def ? 1 : 0); });
     document.getElementById("cat-body").innerHTML = items.map(catRowHTML).join("") ||
-      '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--muted)">' +
+      '<tr><td colspan="8" style="padding:18px;text-align:center;color:var(--muted)">' +
       (showHidden ? '삭제한 품목이 없습니다.' : '찾는 품목이 없습니다.') + '</td></tr>';
     var live = CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length;
     var gone = CATALOG.filter(function(it){ return !it.sys && it.hidden; }).length;
@@ -1392,6 +1410,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     t.textContent = showHidden ? "← 품목 목록으로" : "삭제한 품목 (" + gone + ")";
     t.disabled = !showHidden && !gone;
     document.getElementById("cat-add").hidden = showHidden;
+    syncPicks();
   }
 
   function onCatEdit(e){
@@ -1408,13 +1427,45 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       else { var sub = tr.querySelector(".sub"); if(sub) sub.textContent = "식사 단가 " + won(unitPrice(it)) + "원"; }
     }
   }
-  document.getElementById("cat-body").addEventListener("change", onCatEdit);
+  document.getElementById("cat-body").addEventListener("change", function(e){
+    if(e.target.classList.contains("pick")){
+      var id = e.target.closest("tr").getAttribute("data-id");
+      if(e.target.checked) picked[id] = true; else delete picked[id];
+      syncPicks(); return;
+    }
+    onCatEdit(e);
+  });
+  document.getElementById("cat-selall").addEventListener("change", function(e){
+    visibleIds().forEach(function(id){ if(e.target.checked) picked[id] = true; else delete picked[id]; });
+    [].forEach.call(document.querySelectorAll("#cat-body .pick"), function(c){ c.checked = e.target.checked; });
+    syncPicks();
+  });
+  // 선택한 품목 한꺼번에 삭제(목록) / 복원(삭제한 품목)
+  document.getElementById("cat-bulk").addEventListener("click", function(){
+    var ids = Object.keys(picked).filter(function(id){ var it = product(id); return it.id === id && !!it.hidden === showHidden; });
+    if(!ids.length) return;
+    if(showHidden){
+      ids.forEach(function(id){ setCat(id, "hidden", false); });
+    } else {
+      if(!confirm(ids.length + "개 품목을 삭제할까요? \"삭제한 품목\"에서 다시 살릴 수 있습니다.")) return;
+      ids.forEach(function(id){
+        var it = product(id);
+        if(id.indexOf("u:") === 0 && !it.src && !it.name){
+          catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
+          saveCatEdits(); buildCatalog();
+        } else setCat(id, "hidden", true);
+      });
+    }
+    picked = {};
+    renderCatalog();
+  });
   document.getElementById("cat-body").addEventListener("input", function(e){
     if(e.target.type === "text" || e.target.type === "number") onCatEdit(e);
   });
   document.getElementById("cat-body").addEventListener("click", function(e){
     var b = e.target.closest("[data-act]"); if(!b) return;
     var id = b.closest("tr").getAttribute("data-id"), it = product(id);
+    delete picked[id];
     if(b.getAttribute("data-act") === "restore"){ setCat(id, "hidden", false); renderCatalog(); return; }
     // 아무것도 적지 않은 새 품목은 바로 지운다
     if(id.indexOf("u:") === 0 && !it.src && !it.name){
@@ -1425,7 +1476,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     setCat(id, "hidden", true); renderCatalog();
   });
   document.getElementById("cat-hidden").addEventListener("click", function(){
-    showHidden = !showHidden; renderCatalog();
+    showHidden = !showHidden; picked = {}; renderCatalog();
   });
   document.getElementById("cat-search").addEventListener("input", renderCatalog);
   document.getElementById("cat-add").addEventListener("click", function(){
@@ -1444,7 +1495,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function closeCatalog(){ elCat.hidden = true; renderRows(); renderDoc(); }
   document.getElementById("open-catalog").addEventListener("click", function(){
     document.getElementById("cat-search").value = "";
-    showHidden = false; renderCatalog(); elCat.hidden = false;
+    showHidden = false; picked = {}; renderCatalog(); elCat.hidden = false;
     document.getElementById("cat-search").focus();
   });
   document.getElementById("cat-close").addEventListener("click", closeCatalog);
