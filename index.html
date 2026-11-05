@@ -178,6 +178,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 }
 .warn{font-size:12px; color:var(--danger); margin-top:6px}
 .okline{font-size:12px; color:var(--accent); margin-top:6px}
+.seg{display:flex; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden}
+.seg button{flex:1; border:0; background:var(--surface); padding:9px 8px; cursor:pointer; font-size:13px; color:var(--ink)}
+.seg button + button{border-left:1px solid var(--line-strong)}
+.seg button.on{background:var(--accent); color:#fff; font-weight:700}
 .parsed{font-size:12px; color:var(--muted); margin:6px 0 0; padding-left:16px}
 .empty{
   border:1px dashed var(--line-strong); border-radius:10px; padding:26px; text-align:center;
@@ -219,11 +223,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <h2>기본 정보</h2>
         <div class="body">
           <div class="field">
-            <label for="f-doctype">문서 제목</label>
-            <select id="f-doctype">
-              <option value="quote">견적서</option>
-              <option value="statement">거래명세서</option>
-            </select>
+            <label>문서</label>
+            <div class="seg" id="m-doc">
+              <button type="button" data-v="quote">견적서</button>
+              <button type="button" data-v="statement">거래명세서</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>결제</label>
+            <div class="seg" id="m-pay">
+              <button type="button" data-v="online">인터넷 결제</button>
+              <button type="button" data-v="site">현장 결제</button>
+            </div>
+            <span class="hint" id="m-pay-hint"></span>
           </div>
           <div class="field">
             <label for="f-client">수신 (거래처명)</label>
@@ -267,8 +279,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <div class="body">
           <div id="rows" style="display:flex;flex-direction:column;gap:12px"></div>
           <div class="addrow">
-            <button class="btn wide" type="button" id="add-view">+ 관람 (사유원)</button>
-            <button class="btn wide" type="button" id="add-food">+ 식음·프로그램 (신라철강)</button>
+            <button class="btn wide" type="button" id="add-view">+ 관람</button>
+            <button class="btn wide" type="button" id="add-food">+ 식음·프로그램</button>
           </div>
           <div id="rowwarn"></div>
         </div>
@@ -353,6 +365,25 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   var DOC_TITLE = { quote:"견   적   서", statement:"거 래 명 세 서" };
   var DOC_NAME  = { quote:"견적서", statement:"거래명세서" };
   function docTitle(){ return DOC_TITLE[state.docType] || DOC_TITLE.quote; }
+  // 인터넷 결제는 모든 품목을 ㈜사유원으로, 현장 결제는 관람만 사유원 · 나머지는 신라철강으로 발급
+  function formOf(r){ return state.payMode === "online" ? "sayuwon" : product(r.pid).form; }
+  // 사유원 양식에 관람 외 품목이 섞이면(인터넷 결제) 면세로 표기하지 않는다
+  function taxOf(form){
+    if(form === "shilla") return "VAT 포함";
+    var mixed = rowsOf("sayuwon").some(function(r){ return product(r.pid).form !== "sayuwon"; });
+    return mixed ? "" : "면세";
+  }
+  function sheetLabelOf(form){
+    if(form === "sayuwon" && state.payMode === "online") return "㈜사유원 · 인터넷 결제 (전체 품목)";
+    return COMPANY[form].sheetLabel;
+  }
+  var MODE_KEY = "sy_mode";
+  function loadMode(){
+    try { return JSON.parse(localStorage.getItem(MODE_KEY) || "{}"); } catch(e){ return {}; }
+  }
+  function saveMode(){
+    try { localStorage.setItem(MODE_KEY, JSON.stringify({ docType: state.docType, payMode: state.payMode })); } catch(e){}
+  }
   function docName(){ return DOC_NAME[state.docType] || DOC_NAME.quote; }
   function product(id){ for(var i=0;i<PRODUCTS.length;i++){ if(PRODUCTS[i].id===id) return PRODUCTS[i]; } return PRODUCTS[0]; }
 
@@ -380,7 +411,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       client: "", clientMgr: "",
       useDate: "", useDateText: "", quoteDate: todayISO(),
       sender: loadSender(), pax: null,
-      footnote: "", rows: [], docType: "quote"
+      footnote: "", rows: [], docType: loadMode().docType || "quote", payMode: loadMode().payMode || "site"
     };
     state.rows.push(makeRow("view_wd"));
     state.rows.push(makeRow("sadam"));
@@ -425,7 +456,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
   function amount(r){ return discPrice(r) * (Number(r.qty) || 0); }
   function rowsOf(form){
-    return state.rows.filter(function(r){ return product(r.pid).form === form; });
+    return state.rows.filter(function(r){ return formOf(r) === form; });
   }
   function totalOf(form){
     return rowsOf(form).reduce(function(s,r){ return s + amount(r); }, 0);
@@ -477,7 +508,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     card.className = "rowcard";
     card.innerHTML =
       '<div class="rowhead">' +
-        '<span class="tag ' + (form === "sayuwon" ? "green" : "steel") + '">' + (form === "sayuwon" ? "사유원" : "신라철강") + '</span>' +
+        '<span class="tag ' + (formOf(r) === "sayuwon" ? "green" : "steel") + '">' + (formOf(r) === "sayuwon" ? "사유원" : "신라철강") + '</span>' +
         '<select data-f="pid">' + optionsFor(form) + '</select>' +
         '<button class="iconbtn" type="button" data-act="del" aria-label="행 삭제">✕</button>' +
       '</div>' +
@@ -595,7 +626,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       body += '<tr>' + new Array(cols.length+1).join('<td>&nbsp;</td>') + '</tr>';
     }
     var totalRow = isSay
-      ? '<tr class="total"><td class="label" colspan="4">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">-</td></tr>'
+      ? '<tr class="total"><td class="label" colspan="4">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">' + (taxOf(form) === "면세" ? "-" : "") + '</td></tr>'
       : '<tr class="total"><td class="label" colspan="3">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">Vat 포함</td></tr>';
 
     var supply = Math.round(total / 1.1), vat = total - supply;
@@ -621,7 +652,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           '<div>발 행 일 : ' + esc(fmtDate(state.quoteDate, false)) + '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원(' + c.taxLabel + ')</div>' +
+      '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원' + (taxOf(form) ? '(' + taxOf(form) + ')' : '') + '</div>' +
       '<table><colgroup>' + widths.map(function(w){ return '<col style="width:'+w+'">'; }).join("") + '</colgroup>' +
         '<thead><tr>' + cols.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join("") + '</tr></thead>' +
         '<tbody>' + body + totalRow + '</tbody></table>' +
@@ -643,7 +674,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     } else {
       elPreview.innerHTML = forms.map(function(f){
         return '<div class="sheetwrap">' +
-            '<div class="sheetlabel">' + esc(COMPANY[f].sheetLabel) + '</div>' +
+            '<div class="sheetlabel">' + esc(sheetLabelOf(f)) + '</div>' +
             '<div class="scaler"><div class="sheetbox">' + sheetHTML(f) + '</div></div>' +
           '</div>';
       }).join("");
@@ -672,7 +703,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var supply = Math.round(b/1.1), vat = b - supply;
     var html = "";
     if(rowsOf("sayuwon").length){
-      html += '<div class="line"><span>㈜사유원 · 관람 <span class="small">(면세)</span></span><span>' + won(a) + '원</span></div>';
+      html += '<div class="line"><span>㈜사유원 · ' + (state.payMode === "online" ? "인터넷 결제" : "관람") +
+        (taxOf("sayuwon") ? ' <span class="small">(' + taxOf("sayuwon") + ')</span>' : '') + '</span><span>' + won(a) + '원</span></div>';
     }
     if(rowsOf("shilla").length){
       html += '<div class="line"><span>신라철강㈜ · 식음 <span class="small">(VAT 포함)</span></span><span>' + won(b) + '원</span></div>';
@@ -721,6 +753,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // 일반 브라우저(GitHub Pages)에서 파일 내려받기
   var browserDownloads = {
     save: function(o){
+      rememberSender(state.sender);   // 발행한 담당자 성함은 이 컴퓨터에 계속 남긴다
       var a = document.createElement("a");
       a.href = URL.createObjectURL(o.data);
       a.download = o.filename;
@@ -859,7 +892,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var ar = mr + 4;
     ws.getRow(ar).height = 27;
     ws.mergeCells(ar, C0, ar, C0+1);
-    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + c.taxLabel + ")", { size:12, bold:true });
+    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원" + (taxOf(form) ? "(" + taxOf(form) + ")" : ""), { size:12, bold:true });
     for(var col=C0; col<=CN; col++){
       var b = ws.getCell(ar, col);
       b.border = { bottom:{ style:"medium" } };
@@ -903,7 +936,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     cell(lastRow, C0, "견적금액", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, C0, hr, lastRow) });
     cell(lastRow, CN-1, total, { size:12, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
-    cell(lastRow, CN, isSay ? "-" : "Vat 포함", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
+    cell(lastRow, CN, isSay ? (taxOf(form) === "면세" ? "-" : null) : "Vat 포함", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
 
     // 공급가액 / 부가세 · 안내문구
     var after = lastRow + 2;
@@ -1023,6 +1056,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var inner = b.product.match(/\(([^)]*,[^)]*)\)/);
     var prefix = inner ? b.product.slice(0, inner.index) : "";
     var parts = inner ? inner[1].split(",") : [b.product];
+    // "사담 디너(관람 포함)", "몽몽마방 패키지(관람료 포함)" 같은 관람 포함 패키지 → 관람 + 식사로 나눈다
+    if(!inner && /관람/.test(b.product)){
+      var food = matchProduct(b.product.replace(/관람료?/g, ""));
+      if(food && product(food).form === "shilla"){
+        prefix = /주말/.test(b.product) ? "주말 " : /평일/.test(b.product) ? "평일 " : "";
+        parts = ["관람", b.product.replace(/\(?\s*관람료?\s*포함\s*\)?/g, "").trim()];
+      }
+    }
     var qty = b.qty || 1, rows = [], open = [];
     parts.map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(part){
       var id = matchProduct(prefix + part);
@@ -1102,8 +1143,25 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return el;
   }
 
+  function paintModes(){
+    [["m-doc","docType"],["m-pay","payMode"]].forEach(function(m){
+      var btns = document.getElementById(m[0]).querySelectorAll("button");
+      for(var i=0;i<btns.length;i++) btns[i].classList.toggle("on", btns[i].getAttribute("data-v") === state[m[1]]);
+    });
+    document.getElementById("m-pay-hint").textContent = state.payMode === "online"
+      ? "모든 품목을 ㈜사유원 한 장으로 발급합니다"
+      : "관람은 ㈜사유원, 식음 · 프로그램 · 대관은 신라철강㈜으로 나눠 발급합니다";
+  }
+  function bindMode(id, key){
+    document.getElementById(id).addEventListener("click", function(e){
+      var v = e.target.getAttribute && e.target.getAttribute("data-v");
+      if(!v) return;
+      state[key] = v; saveMode(); paintModes(); renderRows(); renderDoc();
+    });
+  }
+
   function paint(){
-    document.getElementById("f-doctype").value = state.docType;
+    paintModes();
     document.getElementById("f-client").value = state.client;
     document.getElementById("f-clientmgr").value = state.clientMgr;
     document.getElementById("f-usedate").value = state.useDate;
@@ -1118,9 +1176,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   defaultState();
 
-  document.getElementById("f-doctype").addEventListener("change", function(e){
-    state.docType = e.target.value; renderDoc();
-  });
+  bindMode("m-doc", "docType");
+  bindMode("m-pay", "payMode");
   bindField("f-client", "client");
   bindField("f-clientmgr", "clientMgr");
   bindField("f-usedate", "useDate");
