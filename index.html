@@ -367,11 +367,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function docTitle(){ return DOC_TITLE[state.docType] || DOC_TITLE.quote; }
   // 인터넷 결제는 모든 품목을 ㈜사유원으로, 현장 결제는 관람만 사유원 · 나머지는 신라철강으로 발급
   function formOf(r){ return state.payMode === "online" ? "sayuwon" : product(r.pid).form; }
-  // 사유원 양식에 관람 외 품목이 섞이면(인터넷 결제) 면세로 표기하지 않는다
+  // 관람만 있으면 면세, 과세 품목(관람 외)이 하나라도 섞이면(인터넷 결제) VAT 포함
   function taxOf(form){
     if(form === "shilla") return "VAT 포함";
     var mixed = rowsOf("sayuwon").some(function(r){ return product(r.pid).form !== "sayuwon"; });
-    return mixed ? "" : "면세";
+    return mixed ? "VAT 포함" : "면세";
   }
   function sheetLabelOf(form){
     if(form === "sayuwon" && state.payMode === "online") return "㈜사유원 · 인터넷 결제 (전체 품목)";
@@ -626,7 +626,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       body += '<tr>' + new Array(cols.length+1).join('<td>&nbsp;</td>') + '</tr>';
     }
     var totalRow = isSay
-      ? '<tr class="total"><td class="label" colspan="4">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">' + (taxOf(form) === "면세" ? "-" : "") + '</td></tr>'
+      ? '<tr class="total"><td class="label" colspan="4">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">' + (taxOf(form) === "면세" ? "-" : "Vat 포함") + '</td></tr>'
       : '<tr class="total"><td class="label" colspan="3">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">Vat 포함</td></tr>';
 
     var supply = Math.round(total / 1.1), vat = total - supply;
@@ -652,7 +652,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           '<div>발 행 일 : ' + esc(fmtDate(state.quoteDate, false)) + '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원' + (taxOf(form) ? '(' + taxOf(form) + ')' : '') + '</div>' +
+      '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원(' + taxOf(form) + ')</div>' +
       '<table><colgroup>' + widths.map(function(w){ return '<col style="width:'+w+'">'; }).join("") + '</colgroup>' +
         '<thead><tr>' + cols.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join("") + '</tr></thead>' +
         '<tbody>' + body + totalRow + '</tbody></table>' +
@@ -704,7 +704,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var html = "";
     if(rowsOf("sayuwon").length){
       html += '<div class="line"><span>㈜사유원 · ' + (state.payMode === "online" ? "인터넷 결제" : "관람") +
-        (taxOf("sayuwon") ? ' <span class="small">(' + taxOf("sayuwon") + ')</span>' : '') + '</span><span>' + won(a) + '원</span></div>';
+        ' <span class="small">(' + taxOf("sayuwon") + ')</span></span><span>' + won(a) + '원</span></div>';
     }
     if(rowsOf("shilla").length){
       html += '<div class="line"><span>신라철강㈜ · 식음 <span class="small">(VAT 포함)</span></span><span>' + won(b) + '원</span></div>';
@@ -892,7 +892,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var ar = mr + 4;
     ws.getRow(ar).height = 27;
     ws.mergeCells(ar, C0, ar, C0+1);
-    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원" + (taxOf(form) ? "(" + taxOf(form) + ")" : ""), { size:12, bold:true });
+    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + taxOf(form) + ")", { size:12, bold:true });
     for(var col=C0; col<=CN; col++){
       var b = ws.getCell(ar, col);
       b.border = { bottom:{ style:"medium" } };
@@ -936,7 +936,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     cell(lastRow, C0, "견적금액", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, C0, hr, lastRow) });
     cell(lastRow, CN-1, total, { size:12, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
-    cell(lastRow, CN, isSay ? (taxOf(form) === "면세" ? "-" : null) : "Vat 포함", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
+    cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:12, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
 
     // 공급가액 / 부가세 · 안내문구
     var after = lastRow + 2;
