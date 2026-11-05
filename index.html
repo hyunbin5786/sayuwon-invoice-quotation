@@ -279,8 +279,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           <div class="field">
             <label>용도</label>
             <div class="seg" id="m-use">
-              <button type="button" data-v="real">실제</button>
-              <button type="button" data-v="fake">외부용 (고객 요청 수정본)</button>
+              <button type="button" data-v="real">실제만</button>
+              <button type="button" data-v="fake">실제 + 외부용 (고객 요청 수정본)</button>
             </div>
           </div>
           <div class="field">
@@ -365,14 +365,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       </section>
 
       <section class="panel actions">
-        <h2>파일 발행</h2>
+        <h2>출력</h2>
         <div class="body">
-          <button class="btn primary block" type="button" id="dl-all">PDF 저장</button>
-          <div class="addrow">
-            <button class="btn wide" type="button" id="dl-sayuwon">PDF · 사유원만</button>
-            <button class="btn wide" type="button" id="dl-shilla">PDF · 신라철강만</button>
-          </div>
-          <button class="btn block" type="button" id="dl-xlsx">엑셀 저장 (두 시트 한 파일)</button>
+          <button class="btn primary block" type="button" id="out-real">출력</button>
+          <button class="btn primary block" type="button" id="out-fake" hidden>외부용 출력</button>
+          <span class="hint">PDF(사유원 · 신라철강 모두)와 엑셀이 함께 저장됩니다</span>
           <div class="status" id="status" aria-live="polite"></div>
           <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
         </div>
@@ -1128,12 +1125,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     w.innerHTML = msgs.map(function(m){ return '<div class="warn">' + esc(m) + '</div>'; }).join("");
   }
 
+  // 실제 모드: "출력" 하나 / 외부용 모드: "실제 ○○ 출력" + "외부용 ○○ 출력"
   function updateButtons(){
-    var forms = activeForms();
-    document.getElementById("dl-all").disabled = forms.length === 0;
-    document.getElementById("dl-xlsx").disabled = forms.length === 0;
-    document.getElementById("dl-sayuwon").disabled = forms.indexOf("sayuwon") < 0;
-    document.getElementById("dl-shilla").disabled = forms.indexOf("shilla") < 0;
+    var none = activeForms().length === 0, fake = state.docUse === "fake";
+    var real = document.getElementById("out-real"), ext = document.getElementById("out-fake");
+    real.textContent = fake ? "실제 " + docName() + " 출력" : "출력";
+    ext.textContent = "외부용 " + docName() + " 출력";
+    ext.hidden = !fake;
+    real.disabled = ext.disabled = none;
   }
 
   // ---------- PDF ----------
@@ -1143,12 +1142,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     elStatus.className = "status" + (kind ? " " + kind : "");
   }
 
-  function validate(){
+  function validate(kind){
     if(!state.client.trim()) return "수신 거래처명을 입력해 주세요.";
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
     if(!state.quoteDate) return "발행일을 입력해 주세요.";
     if(state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
-    if(state.docUse === "fake" && fakeShort().length) return "외부용 금액이 실제보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
+    if(kind === "fake" && fakeShort().length) return "외부용 금액이 실제보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
     return null;
   }
 
@@ -1173,67 +1172,63 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var issuer = forms.map(function(f){ return f === "sayuwon" ? "사유원" : "신라철강"; }).join("_");
     return (tag ? tag + "_" : "") + issuer + "_" + docName() + "_" + who + "_" + d + ".pdf";
   }
-  // 저장할 묶음: 실제만, 또는 외부용 + 실제(반드시 함께)
-  function variants(){
-    return state.docUse === "fake"
-      ? [{ tag:"외부용", rows: fakeRows() }, { tag:"실제", rows: state.rows }]
-      : [{ tag:"", rows: state.rows }];
-  }
-
+  // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 같은 내용의 엑셀 한 개를 함께 저장
+  // kind = "real"(실제) | "fake"(외부용). 외부용 모드에서는 파일 이름 앞에 실제_ / 외부용_
   var busy = false;
-  async function makePdf(forms){
+  async function makeOutput(kind){
     if(busy) return;
-    var bad = validate();
+    var bad = validate(kind);
     if(bad){ status(bad, "err"); return; }
     if(!window.html2canvas || !window.jspdf){ status("PDF 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err"); return; }
 
-    busy = true;
-    status("PDF를 만드는 중입니다…");
-    try{
-      var downloads = browserDownloads;
-      if(!downloads){ status("이 화면에서는 파일 저장이 지원되지 않습니다.", "err"); busy = false; return; }
+    var rows = kind === "fake" ? fakeRows() : state.rows;
+    var tag = state.docUse === "fake" ? (kind === "fake" ? "외부용" : "실제") : "";
+    var sheets = withRows(rows, function(){
+      return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
+    });
+    if(!sheets.length) return;
+    var forms = sheets.map(function(s){ return s.form; });
+    var pdfName = fileName(forms, tag), xlsxName = pdfName.replace(/\.pdf$/, ".xlsx");
 
+    busy = true;
+    status("파일을 만드는 중입니다…");
+    var host = document.createElement("div");
+    try{
       if(document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch(e){} }
 
-      var host = document.createElement("div");
+      // PDF
       host.style.cssText = "position:fixed;left:-20000px;top:0;width:794px;background:#fff;z-index:-1;";
       document.body.appendChild(host);
-
-      var jsPDFctor = window.jspdf.jsPDF;
-      var saved = [], vs = variants();
-      for(var v=0; v<vs.length; v++){
-        // 이 묶음에 실제로 있는 양식만 (외부용에서 양식이 비면 건너뜀)
-        var sheets = withRows(vs[v].rows, function(){
-          var has = activeForms();
-          return forms.filter(function(f){ return has.indexOf(f) >= 0; })
-            .map(function(f){ return { form:f, html: sheetHTML(f) }; });
+      var pdf = new window.jspdf.jsPDF({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
+      for(var i=0;i<sheets.length;i++){
+        host.innerHTML = sheets[i].html;
+        var el = host.firstElementChild;
+        el.style.boxShadow = "none";
+        var canvas = await html2canvas(el, {
+          scale: 3, backgroundColor: "#ffffff", logging: false,
+          width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
         });
-        if(!sheets.length) continue;
-        var pdf = new jsPDFctor({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
-        for(var i=0;i<sheets.length;i++){
-          host.innerHTML = sheets[i].html;
-          var el = host.firstElementChild;
-          el.style.boxShadow = "none";
-          var canvas = await html2canvas(el, {
-            scale: 3, backgroundColor: "#ffffff", logging: false,
-            width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
-          });
-          if(i > 0) pdf.addPage();
-          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
-        }
-        var name = fileName(sheets.map(function(s){ return s.form; }), vs[v].tag);
-        await downloads.save({ filename: name, data: pdf.output("blob") });
-        saved.push(name);
+        if(i > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
       }
-      host.remove();
-      status("저장했습니다 · " + saved.join(", "), "ok");
+
+      // 엑셀
+      var ExcelJS = await ensureExcel();
+      var wb = new ExcelJS.Workbook();
+      wb.creator = "견적서 발행기";
+      wb.created = new Date();
+      withRows(rows, function(){ forms.forEach(function(f){ buildSheet(wb, f, tag); }); });
+      var buf = await wb.xlsx.writeBuffer();
+
+      await browserDownloads.save({ filename: pdfName, data: pdf.output("blob") });
+      await browserDownloads.save({ filename: xlsxName, data: new Blob([buf]) });
+      status("저장했습니다 · " + pdfName + " · " + xlsxName, "ok");
     } catch(err){
       var code = err && err.code;
-      if(code === "declined") status("저장을 취소했습니다.");
-      else if(code === "rate_limited") status("잠시 후 다시 시도해 주세요.", "err");
-      else if(code === "unavailable" || code === "not_granted") status("이 화면에서는 파일 저장이 지원되지 않습니다.", "err");
-      else status("PDF를 만들지 못했습니다" + (code ? " (" + code + ")" : "") + ".", "err");
+      if(code === "lib") status("엑셀 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err");
+      else status("파일을 만들지 못했습니다" + (code ? " (" + code + ")" : "") + ".", "err");
     }
+    host.remove();
     busy = false;
   }
 
@@ -1377,43 +1372,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       });
     } catch(e){}
     return ws;
-  }
-
-  async function makeXlsx(){
-    if(busy) return;
-    var forms = activeForms();
-    if(!forms.length) return;
-    var bad = validate();
-    if(bad){ status(bad, "err"); return; }
-
-    busy = true;
-    status("엑셀 파일을 만드는 중입니다…");
-    try{
-      var downloads = browserDownloads;
-      if(!downloads){ status("이 화면에서는 파일 저장이 지원되지 않습니다.", "err"); busy = false; return; }
-
-      var ExcelJS = await ensureExcel();
-      var wb = new ExcelJS.Workbook();
-      wb.creator = "견적서 발행기";
-      wb.created = new Date();
-      // 외부용이면 한 파일에 외부용 시트와 실제 시트를 함께 넣는다
-      variants().forEach(function(v){
-        withRows(v.rows, function(){ activeForms().forEach(function(f){ buildSheet(wb, f, v.tag); }); });
-      });
-
-      var buf = await wb.xlsx.writeBuffer();
-      var name = fileName(forms, state.docUse === "fake" ? "외부용+실제" : "").replace(/\.pdf$/, ".xlsx");
-      await downloads.save({ filename: name, data: new Blob([buf]) });
-      status("저장했습니다 · " + name, "ok");
-    } catch(err){
-      var code = err && err.code;
-      if(code === "declined") status("저장을 취소했습니다.");
-      else if(code === "lib") status("엑셀 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err");
-      else if(code === "rate_limited") status("잠시 후 다시 시도해 주세요.", "err");
-      else if(code === "unavailable" || code === "not_granted") status("이 화면에서는 파일 저장이 지원되지 않습니다.", "err");
-      else status("엑셀 파일을 만들지 못했습니다" + (code ? " (" + code + ")" : "") + ".", "err");
-    }
-    busy = false;
   }
 
   // ---------- 예약 정보 붙여넣기 ----------
@@ -1765,10 +1723,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("reset").addEventListener("click", function(){
     defaultState(); paint(); status("");
   });
-  document.getElementById("dl-all").addEventListener("click", function(){ makePdf(activeForms()); });
-  document.getElementById("dl-sayuwon").addEventListener("click", function(){ makePdf(["sayuwon"]); });
-  document.getElementById("dl-shilla").addEventListener("click", function(){ makePdf(["shilla"]); });
-  document.getElementById("dl-xlsx").addEventListener("click", function(){ makeXlsx(); });
+  document.getElementById("out-real").addEventListener("click", function(){ makeOutput("real"); });
+  document.getElementById("out-fake").addEventListener("click", function(){ makeOutput("fake"); });
 
   paint();
 })();
