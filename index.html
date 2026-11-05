@@ -137,7 +137,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   .app > div:first-child{min-height:0; overflow-y:auto; padding-right:8px; padding-bottom:24px}
   .previewpane{min-height:0; flex-direction:row; align-items:flex-start; gap:18px; overflow:hidden}
   .sheetwrap{flex:1 1 0}
+  .previewpane.pairs{overflow-y:auto}
 }
+/* 외부용: 내부용 | 외부용 두 칸씩 */
+.previewpane.pairs{display:grid; grid-template-columns:1fr 1fr; align-content:start; gap:18px}
 .sheetlabel{
   font-size:11.5px; letter-spacing:.07em; color:var(--muted); margin-bottom:8px;
   display:flex; align-items:center; gap:8px;
@@ -330,7 +333,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         </div>
       </section>
 
-      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">견적서 수정하기</button>
+      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">문서 수정하기</button>
 
       <!-- 품목 · 안내문구는 필요할 때만 펼친다 -->
       <div id="editarea" hidden>
@@ -1069,16 +1072,28 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!forms.length){
       elPreview.innerHTML = '<div class="empty">품목을 추가하면 여기에 견적서가 나타납니다.</div>';
     } else {
-      // 외부용이면 바꾼 품목으로 그린다 (내부용은 저장할 때 함께 만들어짐)
       var fake = state.docUse === "fake";
-      elPreview.innerHTML = withRows(fake ? fakeRows() : state.rows, function(){
-        return activeForms().map(function(f){
-          return '<div class="sheetwrap">' +
-              '<div class="sheetlabel">' + (fake ? '외부용 · ' : '') + esc(sheetLabelOf(f)) + '</div>' +
-              '<div class="scaler"><div class="sheetbox">' + sheetHTML(f) + '</div></div>' +
-            '</div>';
+      var wrap = function(label, html){
+        return '<div class="sheetwrap"><div class="sheetlabel">' + esc(label) + '</div>' +
+          '<div class="scaler"><div class="sheetbox">' + html + '</div></div></div>';
+      };
+      elPreview.classList.toggle("pairs", fake);
+      if(!fake){
+        elPreview.innerHTML = forms.map(function(f){ return wrap(sheetLabelOf(f), sheetHTML(f)); }).join("");
+      } else {
+        // 외부용: 양식마다 내부용(왼쪽) · 외부용(오른쪽)을 나란히. 바뀐 양식이 먼저
+        var fr = fakeRows();
+        var pairs = forms.map(function(f){
+          var inner = sheetHTML(f);
+          var outer = withRows(fr, function(){ return rowsOf(f).length ? sheetHTML(f) : ""; });
+          return { f:f, inner:inner, outer:outer, changed: inner !== outer };
+        });
+        pairs.sort(function(a, b){ return (b.changed ? 1 : 0) - (a.changed ? 1 : 0); });
+        elPreview.innerHTML = pairs.map(function(p){
+          return wrap("내부용 · " + sheetLabelOf(p.f), p.inner) +
+                 (p.outer ? wrap("외부용 · " + sheetLabelOf(p.f), p.outer) : '<div class="sheetwrap"></div>');
         }).join("");
-      });
+      }
       fitSheets();
     }
     renderSummary();
@@ -1092,7 +1107,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     for(var i=0;i<boxes.length;i++){
       var w = boxes[i].clientWidth || 794;
       // 넓은 화면에서는 고정된 미리보기 높이 안에 견적서 한 장이 통째로 들어가게
-      var h = wideQuery.matches ? elPreview.getBoundingClientRect().bottom - boxes[i].getBoundingClientRect().top - 4 : Infinity;
+      // (외부용 나란히 보기에서는 줄마다 미리보기 높이에 맞춤 — 아래 줄은 스크롤)
+      var labelH = boxes[i].getBoundingClientRect().top - boxes[i].parentElement.getBoundingClientRect().top;
+      var h = wideQuery.matches ? elPreview.clientHeight - labelH - 4 : Infinity;
       var z = Math.min(1, w / 794, h / 1123);
       var inner = boxes[i].firstElementChild;
       inner.style.transform = "scale(" + z + ")";
@@ -1165,7 +1182,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       a.href = URL.createObjectURL(o.data);
       a.download = o.filename;
       document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      // '여러 파일 다운로드 허용'을 누르는 동안 끊기지 않도록 넉넉히 유지
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 60000);
       return Promise.resolve();
     }
   };
@@ -1177,8 +1195,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var d = (state.quoteDate || todayISO()).replace(/-/g, "");
     return "사유원_" + docName() + "_" + who + "_" + d + (tag ? "_" + tag : "") + ".pdf";
   }
-  // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 같은 내용의 엑셀 한 개를 함께 저장
-  // kind = "real"(내부용) | "fake"(외부용)
+  // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 엑셀 한 개를 함께 저장
+  // kind = "real"(내부용) | "fake"(외부용). 엑셀은 어느 버튼이든 같은 파일:
+  // 내부용만이면 시트 하나, 외부용을 함께 만들면 시트1 내부용 · 시트2 외부용
   var busy = false;
   async function makeOutput(kind){
     if(busy) return;
@@ -1192,8 +1211,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
     });
     if(!sheets.length) return;
-    var forms = sheets.map(function(s){ return s.form; });
-    var pdfName = fileName(tag), xlsxName = pdfName.replace(/\.pdf$/, ".xlsx");
+    var pdfName = fileName(tag), xlsxName = fileName("").replace(/\.pdf$/, ".xlsx");
 
     busy = true;
     status("파일을 만드는 중입니다…");
@@ -1222,7 +1240,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var wb = new ExcelJS.Workbook();
       wb.creator = "견적서 발행기";
       wb.created = new Date();
-      withRows(rows, function(){ forms.forEach(function(f){ buildSheet(wb, f, tag); }); });
+      if(state.docUse === "fake"){
+        addFormSheet(wb, "내부용", state.rows);
+        addFormSheet(wb, "외부용", fakeRows());
+      } else {
+        addFormSheet(wb, docName(), state.rows);
+      }
       var buf = await wb.xlsx.writeBuffer();
 
       await browserDownloads.save({ filename: pdfName, data: pdf.output("blob") });
@@ -1252,17 +1275,30 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     });
   }
 
-  function buildSheet(wb, form, tag){
+  // 시트 하나에 그 묶음의 양식(사유원, 신라철강)을 위아래로 넣고, 인쇄할 때 양식마다 한 장씩 나오게 페이지를 나눈다
+  function addFormSheet(wb, name, rows){
+    withRows(rows, function(){
+      var ws = wb.addWorksheet(name, {
+        views: [{ showGridLines:false }],
+        pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0,
+                     margins:{ left:0.5, right:0.5, top:0.6, bottom:0.6, header:0.3, footer:0.3 } }
+      });
+      [1.625,28,11,12,12,14.5,40.5].forEach(function(w,i){ ws.getColumn(i+1).width = w; });
+      var forms = activeForms(), top = 2;
+      forms.forEach(function(f, i){
+        var bottom = drawForm(wb, ws, f, top);
+        if(i < forms.length - 1){ ws.getRow(bottom).addPageBreak(); top = bottom + 2; }
+      });
+    });
+  }
+
+  // 양식 하나를 top 행부터 그리고 마지막 행 번호를 돌려준다. 열은 B~G 공통:
+  // 사유원 = 품명 · 수량 · 정상가 · 할인가 · 금액 · 비고 / 신라철강 = 품명 · 인원,시간 · 단가(D:E) · 금액 · 비고
+  function drawForm(wb, ws, form, top){
     var isSay = form === "sayuwon";
     var c = COMPANY[form], rows = rowsOf(form), total = totalOf(form);
-    var C0 = 2, CN = isSay ? 7 : 6;              // B ~ G / B ~ F
-    var ws = wb.addWorksheet((tag || docName()) + (isSay ? "(사유원)" : "(신라철강)"), {
-      views: [{ showGridLines:false }],
-      pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:1,
-                   margins:{ left:0.5, right:0.5, top:0.6, bottom:0.6, header:0.3, footer:0.3 } }
-    });
-    var widths = isSay ? [1.625,28,11,12,12,14.5,40.5] : [1.625,28,14,13,14.5,44];
-    widths.forEach(function(w,i){ ws.getColumn(i+1).width = w; });
+    var C0 = 2, CN = 7;
+    var span = isSay ? [[2,2],[3,3],[4,4],[5,5],[6,6],[7,7]] : [[2,2],[3,3],[4,5],[6,6],[7,7]];
 
     function cell(r, col, val, opt){
       var x = ws.getCell(r, col);
@@ -1280,8 +1316,18 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
                left:{ style: col===C0 ? "medium" : "thin" }, right:{ style: col===CN ? "medium" : "thin" } };
     }
 
+    // 칸 하나(신라철강 단가는 D:E 두 칸)를 채운다
+    function put(r, i, val, opt, first, last){
+      var s = span[i][0], e = span[i][1];
+      if(e > s) ws.mergeCells(r, s, r, e);
+      for(var col=s; col<=e; col++){
+        opt.border = tb(r, col, first, last);
+        cell(r, col, col === s ? val : null, opt);
+      }
+    }
+
     // 제목
-    var r = isSay ? 2 : 4;
+    var r = top;
     ws.mergeCells(r, C0, r+1, CN);
     cell(r, C0, docTitle(), { size:23, bold:true, underline:true, h:"center" });
     [r, r+1, r+2, r+3].forEach(function(i){ ws.getRow(i).height = 24.95; });
@@ -1324,7 +1370,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var nRows = Math.max(rows.length, minRows);
     var lastRow = hr + nRows + 1;
     cols.forEach(function(h, i){
-      cell(hr, C0+i, h, { size:11, bold:true, h:"center", fill:true, border: tb(hr, C0+i, hr, lastRow) });
+      put(hr, i, h, { size:11, bold:true, h:"center", fill:true }, hr, lastRow);
     });
 
     var aligns = isSay ? ["left","center","right","right","right","center"]
@@ -1337,11 +1383,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         : (isSay ? [d.name, d.qty || null, d.price || null, d.price ? (Number(d.rate) ? discPrice(d) : 0) : null, amount(d) || null, d.note]
                  : [d.name, d.qty || null, d.price ? discPrice(d) : null, amount(d) || null, d.note]);
       vals.forEach(function(v, i){
-        cell(rr, C0+i, v, {
+        put(rr, i, v, {
           size:11, h:aligns[i], wrap: i===cols.length-1,
-          fmt: typeof v === "number" ? "#,##0" : null,
-          border: tb(rr, C0+i, hr, lastRow)
-        });
+          fmt: typeof v === "number" ? "#,##0" : null
+        }, hr, lastRow);
       });
     }
 
@@ -1356,27 +1401,28 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
 
     // 공급가액 / 부가세 · 안내문구
-    var after = lastRow + 2;
+    var after = lastRow, next = lastRow + 2;
     if(!isSay){
       var supply = Math.round(total/1.1);
-      ws.mergeCells(after, C0, after, CN);
-      cell(after, C0, "공급가액 " + won(supply) + "원  ·  부가세 " + won(total-supply) + "원", { size:11, h:"right" });
-      after += 2;
+      ws.mergeCells(next, C0, next, CN);
+      cell(next, C0, "공급가액 " + won(supply) + "원  ·  부가세 " + won(total-supply) + "원", { size:11, h:"right" });
+      after = next; next += 2;
     }
     if(state.footnote.trim()){
-      ws.mergeCells(after, C0, after+1, CN);
-      cell(after, C0, state.footnote.trim(), { size:11, wrap:true });
+      ws.mergeCells(next, C0, next+1, CN);
+      cell(next, C0, state.footnote.trim(), { size:11, wrap:true });
+      after = next + 1;
     }
 
     // 직인
     try{
       var imgId = wb.addImage({ base64: SEAL[form].split(",")[1], extension:"png" });
       ws.addImage(imgId, {
-        tl: { col: CN - 1 + (isSay ? 0.44 : 0.47), row: mr - 1.35 },
+        tl: { col: CN - 1 + 0.44, row: mr - 1.35 },
         ext: { width:62, height:64 }, editAs:"oneCell"
       });
     } catch(e){}
-    return ws;
+    return after;
   }
 
   // ---------- 예약 정보 붙여넣기 ----------
@@ -1712,7 +1758,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function setEditOpen(open){
     document.getElementById("editarea").hidden = !open;
     var b = document.getElementById("toggle-edit");
-    b.textContent = open ? "견적서 수정 닫기" : "견적서 수정하기";
+    b.textContent = open ? "문서 수정 닫기" : "문서 수정하기";
     b.setAttribute("aria-expanded", open ? "true" : "false");
   }
   document.getElementById("toggle-edit").addEventListener("click", function(){
