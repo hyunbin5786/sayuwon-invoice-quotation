@@ -206,6 +206,15 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .btn.danger{color:var(--danger)}
 .btn.danger:hover{border-color:var(--danger)}
+#fakepanel{margin-top:16px}
+.swapcard{border:1px solid var(--line); border-radius:9px; padding:10px 12px; background:var(--surface-2); display:flex; flex-direction:column; gap:8px}
+.swaphead{display:flex; justify-content:space-between; gap:8px; font-size:13px; font-variant-numeric:tabular-nums}
+.swaphead .amt{color:var(--muted); white-space:nowrap}
+.swapline{display:grid; grid-template-columns:minmax(0,1fr) 64px 92px 30px; gap:6px; align-items:center}
+.swapline select, .swapline input{width:100%; padding:6px 7px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); font-size:12.5px}
+.swapline input{text-align:right}
+.swapline .lamt{text-align:right; font-size:12.5px; font-variant-numeric:tabular-nums}
+.swaplock{font-size:12px; color:var(--faint)}
 #editarea{margin-top:16px}
 #editarea + .panel, #toggle-edit + #editarea[hidden] + .panel{margin-top:16px}
 .seg{display:flex; border:1px solid var(--line-strong); border-radius:7px; overflow:hidden}
@@ -268,6 +277,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
             <span class="hint" id="m-pay-hint"></span>
           </div>
           <div class="field">
+            <label>용도</label>
+            <div class="seg" id="m-use">
+              <button type="button" data-v="real">실제</button>
+              <button type="button" data-v="fake">외부용 (고객 요청 수정본)</button>
+            </div>
+          </div>
+          <div class="field">
             <label for="f-client">수신 (거래처명)</label>
             <input id="f-client" type="text" placeholder="예: 동구정신건강복지센터">
           </div>
@@ -301,6 +317,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
             <input id="f-pax" type="number" min="0" step="1" inputmode="numeric">
             <span class="hint">20인 이상이면 할인율이 10%로 자동 전환됩니다</span>
           </div>
+        </div>
+      </section>
+
+      <!-- 외부용: 품목을 다른 품목으로 바꾸고, 늘어난 금액은 할인으로 맞춘다 -->
+      <section class="panel" id="fakepanel" hidden>
+        <h2>외부용 품목 바꾸기</h2>
+        <div class="body">
+          <span class="hint">관람은 바꿀 수 없습니다. 바꿀 품목을 고르면 수량을 자동으로 정하고, 실제보다 늘어난 금액은 ‘할인’ 줄로 맞춥니다. 단가는 품목 관리 가격 그대로입니다.</span>
+          <div id="swaplist" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div id="swapsum" class="summary"></div>
         </div>
       </section>
 
@@ -634,7 +660,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       client: "", clientMgr: "",
       useDate: "", useDateText: "", quoteDate: todayISO(),
       sender: loadSender(), pax: null,
-      footnote: "", rows: [], docType: "quote", payMode: "online"   // 기본: 견적서 · 인터넷 결제
+      footnote: "", rows: [], docType: "quote", payMode: "online",   // 기본: 견적서 · 인터넷 결제
+      docUse: "real", swaps: {}   // 외부용: 행 key → [{pid, qty}] 바꿀 품목
     };
   }
   function loadSender(){
@@ -682,6 +709,57 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return rowsOf(form).reduce(function(s,r){ return s + amount(r); }, 0);
   }
 
+  // ---------- 외부용 ----------
+  function isViewRow(r){ return product(r.pid).kind === "view"; }
+  // 바꿀 수 있는 품목: 식사·굿즈 중 가격이 있는 것. 자주 쓰는 대관·체험비를 맨 위에
+  var SWAP_FIRST = ["대관","세미나","해설사도슨트(수정)","임원도슨트(수정)","사운드워킹","요가프로그램(단체)"];
+  function swapOptions(){
+    function rank(p){ var i = SWAP_FIRST.indexOf(p.src); return i < 0 ? 99 : i; }
+    return CATALOG.filter(function(p){ return !p.sys && !p.hidden && p.src && (p.kind === "food" || p.kind === "goods") && Number(p.price) > 0; })
+      .sort(function(a, b){ return (rank(a) - rank(b)) || byKind(a, b); });
+  }
+  // 남은 금액을 넘기는 가장 작은 수량. 단가가 남은 금액보다 크면 1, 인원수로 넘기면 인원수
+  function autoQty(r, price, remain){
+    var q = Number(r.qty) || 1;
+    if(remain <= 0 || price >= remain) return 1;
+    if(price * q >= remain) return q;
+    return Math.ceil(remain / price);
+  }
+  function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
+  // 실제 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
+  function fakeRows(){
+    var out = [], diff = { sayuwon:0, shilla:0 };
+    state.rows.forEach(function(r){
+      var lines = state.swaps[r.key];
+      if(isViewRow(r) || !lines || !lines.length){ out.push(r); return; }
+      var f = formOf(r);
+      lines.forEach(function(l, i){
+        var p = product(l.pid);
+        out.push({ key: r.key + "-" + i, pid: p.id, name: p.name, qty: Number(l.qty) || 0, price: Number(p.price) || 0,
+                   rate: 0, note: "", form: r.form, disc: false });
+        diff[f] += swapLineAmount(l);
+      });
+      diff[f] -= amount(r);
+    });
+    ["sayuwon","shilla"].forEach(function(f){
+      if(diff[f] > 0) out.push({ key:"adj-" + f, adj:true, pid:"etc_item", name:"할인", qty:1, price:-diff[f], rate:0, note:"", form:f, disc:false });
+    });
+    return out;
+  }
+  // 외부용 금액이 실제보다 모자란 양식 (할인으로는 맞출 수 없음)
+  function fakeShort(){
+    var real = { sayuwon: totalOf("sayuwon"), shilla: totalOf("shilla") };
+    return withRows(fakeRows(), function(){
+      return ["sayuwon","shilla"].filter(function(f){ return totalOf(f) < real[f]; })
+        .map(function(f){ return { form:f, gap: real[f] - totalOf(f) }; });
+    });
+  }
+  function withRows(rows, fn){
+    var keep = state.rows;
+    state.rows = rows;
+    try { return fn(); } finally { state.rows = keep; }
+  }
+
   // ---------- format ----------
   function won(n){ return (Number(n)||0).toLocaleString("ko-KR"); }
   var DOW = ["일","월","화","수","목","금","토"];
@@ -724,7 +802,93 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     state.rows.forEach(function(r){ elRows.appendChild(rowCard(r)); });
     document.getElementById("itemcount").textContent = state.rows.length ? "· " + state.rows.length + "개" : "";
+    renderFakePanel();
   }
+
+  // ---------- 외부용 품목 바꾸기 패널 ----------
+  function swapLineHTML(l, i){
+    var opts = swapOptions().map(function(p){
+      return '<option value="' + esc(p.id) + '"' + (p.id === l.pid ? ' selected' : '') + '>' + esc(p.src) + ' · ' + won(p.price) + '원</option>';
+    }).join("");
+    return '<div class="swapline" data-i="' + i + '">' +
+      '<select data-sw="pid">' + opts + '</select>' +
+      '<input type="number" min="1" step="1" inputmode="numeric" data-sw="qty" value="' + (l.qty || "") + '" aria-label="수량">' +
+      '<span class="lamt">' + won(swapLineAmount(l)) + '원</span>' +
+      '<button class="iconbtn" type="button" data-sw="del" aria-label="바꿀 품목 빼기">✕</button>' +
+    '</div>';
+  }
+  function renderFakePanel(){
+    var panel = document.getElementById("fakepanel");
+    panel.hidden = state.docUse !== "fake";
+    if(panel.hidden) return;
+    var list = document.getElementById("swaplist");
+    if(!state.rows.length){ list.innerHTML = '<div class="swaplock">예약 정보를 먼저 채워 주세요.</div>'; renderSwapSum(); return; }
+    list.innerHTML = state.rows.map(function(r){
+      var head = '<div class="swaphead"><b>' + esc(r.name || "(품명 없음)") + '</b><span class="amt">' +
+        won(r.qty) + ' × ' + won(discPrice(r)) + ' = ' + won(amount(r)) + '원</span></div>';
+      if(isViewRow(r)) return '<div class="swapcard">' + head + '<div class="swaplock">관람은 바꿀 수 없습니다</div></div>';
+      var lines = state.swaps[r.key] || [];
+      return '<div class="swapcard" data-key="' + r.key + '">' + head +
+        (lines.length ? lines.map(swapLineHTML).join("") : '<div class="swaplock">그대로 사용</div>') +
+        '<div><button class="btn small" type="button" data-sw="add">' + (lines.length ? '+ 품목 더하기' : '바꿀 품목 고르기') + '</button></div>' +
+      '</div>';
+    }).join("");
+    renderSwapSum();
+  }
+  function renderSwapSum(){
+    var real = { sayuwon: totalOf("sayuwon"), shilla: totalOf("shilla") };
+    var html = withRows(fakeRows(), function(){
+      return activeForms().map(function(f){
+        var adj = rowsOf(f).filter(function(r){ return r.adj; })[0];
+        var t = totalOf(f), ok = t === real[f];
+        return '<div class="line"><span>' + COMPANY[f].name + ' 외부용</span><span>' + won(t) + '원</span></div>' +
+          '<div class="line small"><span>└ ' + (adj ? '할인 ' + won(-amount(adj)) + '원으로 맞춤' : ok ? '바꾼 품목 없음' : '') + '</span>' +
+          '<span class="small" style="color:' + (ok ? 'var(--accent)' : 'var(--danger)') + '">' +
+          (ok ? '실제 ' + won(real[f]) + '원과 같음' : '실제보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘려 주세요') + '</span></div>';
+      }).join("");
+    });
+    document.getElementById("swapsum").innerHTML = html;
+  }
+  (function(){
+    var list = document.getElementById("swaplist");
+    function ctx(el){
+      var card = el.closest(".swapcard"), key = card && card.getAttribute("data-key");
+      var r = state.rows.filter(function(x){ return String(x.key) === key; })[0];
+      var line = el.closest(".swapline");
+      return { r:r, i: line ? Number(line.getAttribute("data-i")) : -1 };
+    }
+    // 이 행에서 아직 덮지 못한 금액
+    function remainFor(r, skip){
+      var lines = state.swaps[r.key] || [];
+      return amount(r) - lines.reduce(function(s,l,i){ return s + (i === skip ? 0 : swapLineAmount(l)); }, 0);
+    }
+    list.addEventListener("click", function(e){
+      var b = e.target.closest("[data-sw]"); if(!b || b.tagName !== "BUTTON") return;
+      var c = ctx(b); if(!c.r) return;
+      var lines = state.swaps[c.r.key] = state.swaps[c.r.key] || [];
+      if(b.getAttribute("data-sw") === "add"){
+        var p = swapOptions()[0];
+        lines.push({ pid: p.id, qty: autoQty(c.r, p.price, remainFor(c.r, -1)) });
+      } else {
+        lines.splice(c.i, 1);
+      }
+      renderFakePanel(); renderDoc();
+    });
+    list.addEventListener("change", function(e){
+      if(e.target.getAttribute("data-sw") !== "pid") return;
+      var c = ctx(e.target), l = state.swaps[c.r.key][c.i], p = product(e.target.value);
+      l.pid = p.id;
+      l.qty = autoQty(c.r, p.price, remainFor(c.r, c.i));   // 품목을 바꾸면 수량 자동
+      renderFakePanel(); renderDoc();
+    });
+    list.addEventListener("input", function(e){
+      if(e.target.getAttribute("data-sw") !== "qty") return;
+      var c = ctx(e.target), l = state.swaps[c.r.key][c.i];
+      l.qty = e.target.value === "" ? 0 : Number(e.target.value);
+      e.target.closest(".swapline").querySelector(".lamt").textContent = won(swapLineAmount(l)) + "원";
+      renderSwapSum(); renderDoc();
+    });
+  })();
 
   function rowCard(r){
     var form = r.form;
@@ -830,6 +994,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var minRows = MIN_ROWS[form];
     var body = "";
     rows.forEach(function(r){
+      if(r.adj){   // 외부용 할인 줄: 품명과 금액만
+        body += '<tr><td>' + esc(r.name) + '</td>' + (isSay ? '<td></td><td></td><td></td>' : '<td></td><td></td>') +
+          '<td class="num">' + won(amount(r)) + '</td><td class="note">' + esc(r.note) + '</td></tr>';
+        return;
+      }
       if(isSay){
         body += '<tr>' +
           '<td>'+esc(r.name)+'</td>' +
@@ -897,12 +1066,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!forms.length){
       elPreview.innerHTML = '<div class="empty">품목을 추가하면 여기에 견적서가 나타납니다.</div>';
     } else {
-      elPreview.innerHTML = forms.map(function(f){
-        return '<div class="sheetwrap">' +
-            '<div class="sheetlabel">' + esc(sheetLabelOf(f)) + '</div>' +
-            '<div class="scaler"><div class="sheetbox">' + sheetHTML(f) + '</div></div>' +
-          '</div>';
-      }).join("");
+      // 외부용이면 바꾼 품목으로 그린다 (실제본은 저장할 때 함께 만들어짐)
+      var fake = state.docUse === "fake";
+      elPreview.innerHTML = withRows(fake ? fakeRows() : state.rows, function(){
+        return activeForms().map(function(f){
+          return '<div class="sheetwrap">' +
+              '<div class="sheetlabel">' + (fake ? '외부용 · ' : '') + esc(sheetLabelOf(f)) + '</div>' +
+              '<div class="scaler"><div class="sheetbox">' + sheetHTML(f) + '</div></div>' +
+            '</div>';
+        }).join("");
+      });
       fitSheets();
     }
     renderSummary();
@@ -975,6 +1148,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
     if(!state.quoteDate) return "발행일을 입력해 주세요.";
     if(state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
+    if(state.docUse === "fake" && fakeShort().length) return "외부용 금액이 실제보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
     return null;
   }
 
@@ -992,11 +1166,18 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   };
 
   // 예: 사유원_견적서_김수진_20261105.pdf (두 장을 한 파일로 받으면 사유원_신라철강_…)
-  function fileName(forms){
+  // 외부용을 만들 때는 앞에 '외부용_' / '실제_'를 붙여 두 파일을 구분한다
+  function fileName(forms, tag){
     var who = (state.client.trim() || "수신").replace(/[\\/:*?"<>|]/g, " ").trim();
     var d = (state.quoteDate || todayISO()).replace(/-/g, "");
     var issuer = forms.map(function(f){ return f === "sayuwon" ? "사유원" : "신라철강"; }).join("_");
-    return issuer + "_" + docName() + "_" + who + "_" + d + ".pdf";
+    return (tag ? tag + "_" : "") + issuer + "_" + docName() + "_" + who + "_" + d + ".pdf";
+  }
+  // 저장할 묶음: 실제만, 또는 외부용 + 실제(반드시 함께)
+  function variants(){
+    return state.docUse === "fake"
+      ? [{ tag:"외부용", rows: fakeRows() }, { tag:"실제", rows: state.rows }]
+      : [{ tag:"", rows: state.rows }];
   }
 
   var busy = false;
@@ -1019,26 +1200,33 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       document.body.appendChild(host);
 
       var jsPDFctor = window.jspdf.jsPDF;
-      var pdf = new jsPDFctor({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
-
-      for(var i=0;i<forms.length;i++){
-        var src = document.getElementById("sheet-" + forms[i]);
-        var clone = src.cloneNode(true);
-        clone.style.boxShadow = "none";
-        host.innerHTML = "";
-        host.appendChild(clone);
-        var canvas = await html2canvas(clone, {
-          scale: 3, backgroundColor: "#ffffff", logging: false,
-          width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
+      var saved = [], vs = variants();
+      for(var v=0; v<vs.length; v++){
+        // 이 묶음에 실제로 있는 양식만 (외부용에서 양식이 비면 건너뜀)
+        var sheets = withRows(vs[v].rows, function(){
+          var has = activeForms();
+          return forms.filter(function(f){ return has.indexOf(f) >= 0; })
+            .map(function(f){ return { form:f, html: sheetHTML(f) }; });
         });
-        if(i > 0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+        if(!sheets.length) continue;
+        var pdf = new jsPDFctor({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
+        for(var i=0;i<sheets.length;i++){
+          host.innerHTML = sheets[i].html;
+          var el = host.firstElementChild;
+          el.style.boxShadow = "none";
+          var canvas = await html2canvas(el, {
+            scale: 3, backgroundColor: "#ffffff", logging: false,
+            width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
+          });
+          if(i > 0) pdf.addPage();
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+        }
+        var name = fileName(sheets.map(function(s){ return s.form; }), vs[v].tag);
+        await downloads.save({ filename: name, data: pdf.output("blob") });
+        saved.push(name);
       }
       host.remove();
-
-      var blob = pdf.output("blob");
-      await downloads.save({ filename: fileName(forms), data: blob });
-      status("저장했습니다 · " + fileName(forms), "ok");
+      status("저장했습니다 · " + saved.join(", "), "ok");
     } catch(err){
       var code = err && err.code;
       if(code === "declined") status("저장을 취소했습니다.");
@@ -1064,11 +1252,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     });
   }
 
-  function buildSheet(wb, form){
+  function buildSheet(wb, form, tag){
     var isSay = form === "sayuwon";
     var c = COMPANY[form], rows = rowsOf(form), total = totalOf(form);
     var C0 = 2, CN = isSay ? 7 : 6;              // B ~ G / B ~ F
-    var ws = wb.addWorksheet(isSay ? "견적서(사유원)" : "견적서(신라철강)", {
+    var ws = wb.addWorksheet((tag || docName()) + (isSay ? "(사유원)" : "(신라철강)"), {
       views: [{ showGridLines:false }],
       pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:1,
                    margins:{ left:0.5, right:0.5, top:0.6, bottom:0.6, header:0.3, footer:0.3 } }
@@ -1144,10 +1332,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     for(var k=0;k<nRows;k++){
       var rr = hr + 1 + k, d = rows[k];
       ws.getRow(rr).height = 39;
-      var vals = d
-        ? (isSay ? [d.name, d.qty || null, d.price || null, d.price ? (Number(d.rate) ? discPrice(d) : 0) : null, amount(d) || null, d.note]
-                 : [d.name, d.qty || null, d.price ? discPrice(d) : null, amount(d) || null, d.note])
-        : new Array(cols.length).fill(null);
+      var vals = !d ? new Array(cols.length).fill(null)
+        : d.adj ? (isSay ? [d.name, null, null, null, amount(d), d.note] : [d.name, null, null, amount(d), d.note])
+        : (isSay ? [d.name, d.qty || null, d.price || null, d.price ? (Number(d.rate) ? discPrice(d) : 0) : null, amount(d) || null, d.note]
+                 : [d.name, d.qty || null, d.price ? discPrice(d) : null, amount(d) || null, d.note]);
       vals.forEach(function(v, i){
         cell(rr, C0+i, v, {
           size:11, h:aligns[i], wrap: i===cols.length-1,
@@ -1208,10 +1396,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var wb = new ExcelJS.Workbook();
       wb.creator = "견적서 발행기";
       wb.created = new Date();
-      forms.forEach(function(f){ buildSheet(wb, f); });
+      // 외부용이면 한 파일에 외부용 시트와 실제 시트를 함께 넣는다
+      variants().forEach(function(v){
+        withRows(v.rows, function(){ activeForms().forEach(function(f){ buildSheet(wb, f, v.tag); }); });
+      });
 
       var buf = await wb.xlsx.writeBuffer();
-      var name = fileName(forms).replace(/\.pdf$/, ".xlsx");
+      var name = fileName(forms, state.docUse === "fake" ? "외부용+실제" : "").replace(/\.pdf$/, ".xlsx");
       await downloads.save({ filename: name, data: new Blob([buf]) });
       status("저장했습니다 · " + name, "ok");
     } catch(err){
@@ -1333,6 +1524,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var dates = res.blocks.map(function(b){ return b.date; }).filter(Boolean).sort();
     if(dates.length && dates[0] !== dates[dates.length-1]) warns.push("방문일자가 서로 다른 예약이 섞여 있습니다. 이용일을 확인해 주세요.");
     state.rows = rows;
+    state.swaps = {};   // 예약이 바뀌면 외부용 설정도 새로
     state.useDate = dates[0] || state.useDate;
     // 발행일은 이용일 이전. 이용일 이후 요청이면 발행일 = 이용일
     state.quoteDate = state.useDate && todayISO() > state.useDate ? state.useDate : todayISO();
@@ -1507,7 +1699,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
 
   function paintModes(){
-    [["m-doc","docType"],["m-pay","payMode"]].forEach(function(m){
+    [["m-doc","docType"],["m-pay","payMode"],["m-use","docUse"]].forEach(function(m){
       var btns = document.getElementById(m[0]).querySelectorAll("button");
       for(var i=0;i<btns.length;i++) btns[i].classList.toggle("on", btns[i].getAttribute("data-v") === state[m[1]]);
     });
@@ -1541,6 +1733,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   bindMode("m-doc", "docType");
   bindMode("m-pay", "payMode");
+  bindMode("m-use", "docUse");
   bindField("f-client", "client");
   bindField("f-clientmgr", "clientMgr");
   bindField("f-usedate", "useDate");
