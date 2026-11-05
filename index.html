@@ -279,8 +279,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           <div class="field">
             <label>용도</label>
             <div class="seg" id="m-use">
-              <button type="button" data-v="real">실제만</button>
-              <button type="button" data-v="fake">실제 + 외부용 (고객 요청 수정본)</button>
+              <button type="button" data-v="real">내부용만</button>
+              <button type="button" data-v="fake">내부용 + 외부용 (고객 요청 수정본)</button>
             </div>
           </div>
           <div class="field">
@@ -324,7 +324,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <section class="panel" id="fakepanel" hidden>
         <h2>외부용 품목 바꾸기</h2>
         <div class="body">
-          <span class="hint">관람은 바꿀 수 없습니다. 바꿀 품목을 고르면 수량을 자동으로 정하고, 실제보다 늘어난 금액은 ‘할인’ 줄로 맞춥니다. 단가는 품목 관리 가격 그대로입니다.</span>
+          <span class="hint">관람은 바꿀 수 없습니다. 바꿀 품목을 고르면 수량을 자동으로 정하고, 내부용보다 늘어난 금액은 ‘할인’ 줄로 맞춥니다. 단가는 품목 관리 가격 그대로입니다.</span>
           <div id="swaplist" style="display:flex;flex-direction:column;gap:10px"></div>
           <div id="swapsum" class="summary"></div>
         </div>
@@ -723,7 +723,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return Math.ceil(remain / price);
   }
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
-  // 실제 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
+  // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
   function fakeRows(){
     var out = [], diff = { sayuwon:0, shilla:0 };
     state.rows.forEach(function(r){
@@ -743,7 +743,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     });
     return out;
   }
-  // 외부용 금액이 실제보다 모자란 양식 (할인으로는 맞출 수 없음)
+  // 외부용 금액이 내부용보다 모자란 양식 (할인으로는 맞출 수 없음)
   function fakeShort(){
     var real = { sayuwon: totalOf("sayuwon"), shilla: totalOf("shilla") };
     return withRows(fakeRows(), function(){
@@ -841,7 +841,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         return '<div class="line"><span>' + COMPANY[f].name + ' 외부용</span><span>' + won(t) + '원</span></div>' +
           '<div class="line small"><span>└ ' + (adj ? '할인 ' + won(-amount(adj)) + '원으로 맞춤' : ok ? '바꾼 품목 없음' : '') + '</span>' +
           '<span class="small" style="color:' + (ok ? 'var(--accent)' : 'var(--danger)') + '">' +
-          (ok ? '실제 ' + won(real[f]) + '원과 같음' : '실제보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘려 주세요') + '</span></div>';
+          (ok ? '내부용 ' + won(real[f]) + '원과 같음' : '내부용보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘려 주세요') + '</span></div>';
       }).join("");
     });
     document.getElementById("swapsum").innerHTML = html;
@@ -1063,7 +1063,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!forms.length){
       elPreview.innerHTML = '<div class="empty">품목을 추가하면 여기에 견적서가 나타납니다.</div>';
     } else {
-      // 외부용이면 바꾼 품목으로 그린다 (실제본은 저장할 때 함께 만들어짐)
+      // 외부용이면 바꾼 품목으로 그린다 (내부용은 저장할 때 함께 만들어짐)
       var fake = state.docUse === "fake";
       elPreview.innerHTML = withRows(fake ? fakeRows() : state.rows, function(){
         return activeForms().map(function(f){
@@ -1125,11 +1125,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     w.innerHTML = msgs.map(function(m){ return '<div class="warn">' + esc(m) + '</div>'; }).join("");
   }
 
-  // 실제 모드: "출력" 하나 / 외부용 모드: "실제 ○○ 출력" + "외부용 ○○ 출력"
+  // 내부용만: "출력" 하나 / 내부용 + 외부용: "내부용 ○○ 출력" + "외부용 ○○ 출력"
   function updateButtons(){
     var none = activeForms().length === 0, fake = state.docUse === "fake";
     var real = document.getElementById("out-real"), ext = document.getElementById("out-fake");
-    real.textContent = fake ? "실제 " + docName() + " 출력" : "출력";
+    real.textContent = fake ? "내부용 " + docName() + " 출력" : "출력";
     ext.textContent = "외부용 " + docName() + " 출력";
     ext.hidden = !fake;
     real.disabled = ext.disabled = none;
@@ -1147,7 +1147,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
     if(!state.quoteDate) return "발행일을 입력해 주세요.";
     if(state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
-    if(kind === "fake" && fakeShort().length) return "외부용 금액이 실제보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
+    if(kind === "fake" && fakeShort().length) return "외부용 금액이 내부용보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
     return null;
   }
 
@@ -1164,16 +1164,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
   };
 
-  // 예: 사유원_견적서_김수진_20261105.pdf (두 장을 한 파일로 받으면 사유원_신라철강_…)
-  // 외부용을 만들 때는 앞에 '외부용_' / '실제_'를 붙여 두 파일을 구분한다
-  function fileName(forms, tag){
+  // 예: 사유원_내부용_견적서_김수진_20261105.pdf / 사유원_외부용_견적서_김수진_20261105.pdf
+  function fileName(tag){
     var who = (state.client.trim() || "수신").replace(/[\\/:*?"<>|]/g, " ").trim();
     var d = (state.quoteDate || todayISO()).replace(/-/g, "");
-    var issuer = forms.map(function(f){ return f === "sayuwon" ? "사유원" : "신라철강"; }).join("_");
-    return (tag ? tag + "_" : "") + issuer + "_" + docName() + "_" + who + "_" + d + ".pdf";
+    return "사유원_" + tag + "_" + docName() + "_" + who + "_" + d + ".pdf";
   }
   // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 같은 내용의 엑셀 한 개를 함께 저장
-  // kind = "real"(실제) | "fake"(외부용). 외부용 모드에서는 파일 이름 앞에 실제_ / 외부용_
+  // kind = "real"(내부용) | "fake"(외부용)
   var busy = false;
   async function makeOutput(kind){
     if(busy) return;
@@ -1182,13 +1180,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!window.html2canvas || !window.jspdf){ status("PDF 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err"); return; }
 
     var rows = kind === "fake" ? fakeRows() : state.rows;
-    var tag = state.docUse === "fake" ? (kind === "fake" ? "외부용" : "실제") : "";
+    var tag = kind === "fake" ? "외부용" : "내부용";
     var sheets = withRows(rows, function(){
       return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
     });
     if(!sheets.length) return;
     var forms = sheets.map(function(s){ return s.form; });
-    var pdfName = fileName(forms, tag), xlsxName = pdfName.replace(/\.pdf$/, ".xlsx");
+    var pdfName = fileName(tag), xlsxName = pdfName.replace(/\.pdf$/, ".xlsx");
 
     busy = true;
     status("파일을 만드는 중입니다…");
