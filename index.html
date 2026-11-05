@@ -306,10 +306,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
             </div>
           </div>
           <div class="field">
-            <label for="f-usedate-text">이용일 표기 직접 입력 (선택)</label>
-            <input id="f-usedate-text" type="text" placeholder="예: 2026.10.08(목) ~ 10.09(금)">
-          </div>
-          <div class="field">
             <label for="f-sender">발신 담당자</label>
             <input id="f-sender" type="text" placeholder="예: 김선영 차장" list="sender-list" autocomplete="off">
             <datalist id="sender-list"></datalist>
@@ -1747,7 +1743,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById("f-client").value = state.client;
     document.getElementById("f-clientmgr").value = state.clientMgr;
     document.getElementById("f-usedate").value = state.useDate;
-    document.getElementById("f-usedate-text").value = state.useDateText;
     document.getElementById("f-sender").value = state.sender;
     document.getElementById("f-pax").value = state.pax == null ? "" : state.pax;
     document.getElementById("f-footnote").value = state.footnote;
@@ -1763,7 +1758,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   bindField("f-client", "client");
   bindField("f-clientmgr", "clientMgr");
   bindField("f-usedate", "useDate");
-  bindField("f-usedate-text", "useDateText");
   bindField("f-quotedate", "quoteDate");
   bindField("f-sender", "sender", { after: function(){ saveSender(state.sender); } });
   document.getElementById("f-sender").addEventListener("change", function(e){ rememberSender(e.target.value); });
