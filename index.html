@@ -744,15 +744,27 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
   // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
   function fakeRows(){
-    var out = [], diff = { sayuwon:0, shilla:0 };
+    var out = [], diff = { sayuwon:0, shilla:0 }, same = {};
+    // 같은 품목 · 같은 단가 · 같은 발급처면 한 줄로 합쳐 수량만 더한다
+    function mergeKey(x){ return x.pid + "|" + formOf(x) + "|" + (Number(x.price) || 0) + "|" + (x.name || ""); }
+    function pushMerged(x){
+      var k = mergeKey(x);
+      if(same[k]){ same[k].qty = (Number(same[k].qty) || 0) + (Number(x.qty) || 0); return; }
+      same[k] = x; out.push(x);
+    }
     state.rows.forEach(function(r){
       var lines = state.swaps[r.key];
-      if(isViewRow(r) || !lines || !lines.length){ out.push(r); return; }
+      if(isViewRow(r) || !lines || !lines.length){
+        // 할인 없는 기존 품목은 바꾼 품목과 합칠 수 있도록 복사해서 넣는다
+        if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(Object.assign({}, r));
+        else out.push(r);
+        return;
+      }
       var f = formOf(r);
       lines.forEach(function(l, i){
         var p = product(l.pid);
-        out.push({ key: r.key + "-" + i, pid: p.id, name: p.name, qty: Number(l.qty) || 0, price: Number(p.price) || 0,
-                   rate: 0, note: "", form: r.form, disc: false });
+        pushMerged({ key: r.key + "-" + i, pid: p.id, name: p.name, qty: Number(l.qty) || 0, price: Number(p.price) || 0,
+                     rate: 0, note: "", form: r.form, disc: false });
         diff[f] += swapLineAmount(l);
       });
       diff[f] -= amount(r);
