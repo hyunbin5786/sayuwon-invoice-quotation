@@ -368,7 +368,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         </div>
       </section>
 
-      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">문서 수정하기</button>
+      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">내부용 문서 수정하기</button>
 
       <!-- 품목 · 안내문구는 필요할 때만 펼친다 -->
       <div id="editarea" hidden>
@@ -1917,7 +1917,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function setEditOpen(open){
     document.getElementById("editarea").hidden = !open;
     var b = document.getElementById("toggle-edit");
-    b.textContent = open ? "문서 수정 닫기" : "문서 수정하기";
+    b.textContent = open ? "내부용 문서 수정 닫기" : "내부용 문서 수정하기";
     b.setAttribute("aria-expanded", open ? "true" : "false");
   }
   document.getElementById("toggle-edit").addEventListener("click", function(){
