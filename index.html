@@ -1184,7 +1184,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           '<div>발     신 : <span class="sendname">' + esc(c.name) +
             '<img class="seal" alt="" src="' + SEAL[form] + '"></span></div>' +
           '<div>담     당 : ' + esc(state.sender) + '</div>' +
-          '<div>발 행 일 : ' + esc(fmtDate(issueDate(), false)) + '</div>' +
+          '<div>발 행 일 : ' + esc(fmtDate(issueDate(), true)) + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="amountline">견 적 금 액 : ' + (isSay ? "" : "₩ ") + won(total) + '원(' + taxOf(form) + ')</div>' +
@@ -1486,7 +1486,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
                  "이 용 일 : " + useTxt];
     var right = ["발     신 : " + c.name,
                  "담     당 : " + state.sender,
-                 "발 행 일 : " + fmtDate(issueDate(), false)];
+                 "발 행 일 : " + fmtDate(issueDate(), true)];
     for(var i=0;i<3;i++){
       ws.getRow(mr+i).height = 30;
       ws.mergeCells(mr+i, C0, mr+i, C0+1);
