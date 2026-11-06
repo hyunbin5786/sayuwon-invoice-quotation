@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>사유원 견적서 발행기</title>
+<title>사유원 견적서&amp;거래명세서 발행기</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;700&display=swap">
 <style>
 :root{
@@ -236,8 +236,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>견적서 발행</h1>
-      <span class="sub">예약 정보를 붙여넣으면 사유원 · 신라철강 견적서가 자동으로 채워집니다</span>
+      <h1>견적서&amp;거래명세서 발행</h1>
+      <span class="sub">예약 정보를 붙여넣으면 사유원 · 신라철강 견적서와 거래명세서가 자동으로 채워집니다</span>
     </div>
     <div class="rulechips">
       <span class="chip green">수목원 관람 · 면세 · 5%/10% 자동</span>
@@ -1241,7 +1241,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       // 엑셀
       var ExcelJS = await ensureExcel();
       var wb = new ExcelJS.Workbook();
-      wb.creator = "견적서 발행기";
+      wb.creator = "견적서&거래명세서 발행기";
       wb.created = new Date();
       if(state.docUse === "fake"){
         addFormSheet(wb, "내부용", state.rows);
