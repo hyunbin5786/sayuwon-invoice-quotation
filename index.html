@@ -368,7 +368,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         </div>
       </section>
 
-      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">내부용 문서 수정하기</button>
+      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">문서 수정하기</button>
 
       <!-- 품목 · 안내문구는 필요할 때만 펼친다 -->
       <div id="editarea" hidden>
@@ -926,6 +926,17 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     state.rows.forEach(function(r){ elRows.appendChild(rowCard(r)); });
     document.getElementById("itemcount").textContent = state.rows.length ? "· " + state.rows.length + "개" : "";
+    syncFake();
+  }
+  // 문서 수정(품목)이 모든 문서의 기준: 품목을 고치면 외부용도 그 금액에 맞춰 다시 맞춘다
+  function syncFake(){
+    var keys = {};
+    state.rows.forEach(function(r){ if(!isViewRow(r)) keys[r.key] = true; });
+    Object.keys(state.swaps).forEach(function(k){ if(!keys[k]) delete state.swaps[k]; });   // 지운 행 · 관람으로 바뀐 행
+    Object.keys(state.swaps).forEach(function(k){
+      state.swaps[k].forEach(function(l){ var cap = maxQtyOf(l.pid); if((Number(l.qty) || 0) > cap) l.qty = cap; });
+    });
+    optimizeForm("sayuwon"); optimizeForm("shilla");
     renderFakePanel();
   }
 
@@ -1059,7 +1070,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       if(unitPrice(p) != null) r.price = unitPrice(p);
       if(!r.tRate){ r.rate = autoRate(r); }
       if(!r.tNote){ r.note = autoNote(r.rate); }
-      syncCard(card, r); renderDoc();
+      syncCard(card, r); syncFake(); renderDoc();
     });
 
     card.querySelector('[data-act="del"]').addEventListener("click", function(){
@@ -1087,7 +1098,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     el.addEventListener("input", function(){
       r[field] = el.value;
       if(touchFlag) r[touchFlag] = el.value.trim() !== "";
-      renderDoc();
+      syncFake(); renderDoc();
     });
   }
   function bindNum(card, r, field, touchFlag, after){
@@ -1096,7 +1107,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       r[field] = el.value === "" ? null : Number(el.value);
       if(touchFlag) r[touchFlag] = el.value !== "";
       if(after) after();
-      renderDoc();
+      syncFake(); renderDoc();
     });
   }
   function syncCard(card, r){
@@ -1122,6 +1133,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       }
     });
     syncAllCards();
+    syncFake();
   }
 
   // ---------- document rendering ----------
@@ -1917,7 +1929,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function setEditOpen(open){
     document.getElementById("editarea").hidden = !open;
     var b = document.getElementById("toggle-edit");
-    b.textContent = open ? "내부용 문서 수정 닫기" : "내부용 문서 수정하기";
+    b.textContent = open ? "문서 수정 닫기" : "문서 수정하기";
     b.setAttribute("aria-expanded", open ? "true" : "false");
   }
   document.getElementById("toggle-edit").addEventListener("click", function(){
