@@ -721,25 +721,46 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       .sort(function(a, b){ return (rank(a) - rank(b)) || byKind(a, b); });
   }
   // 바꾼 품목들의 수량을 정한다: 각 1개 이상, 합계가 원래 금액 이상이면서 할인(넘치는 금액)이 가장 작게
+  // 같은 품목을 고른 줄은 하나로 묶어(최소 = 줄 수) 계산하고, 남는 수량은 첫 줄에 준다
   function optimizeQtys(lines, target){
-    var prices = lines.map(function(l){ return Number(product(l.pid).price) || 0; });
-    if(!prices.length || prices.some(function(p){ return p <= 0; })) return;
-    var n = prices.length, q = prices.map(function(){ return 1; });
-    var best = null, bestQ = null, steps = 0;
-    function rest(i){ var s = 0; for(var j=i; j<n; j++) s += prices[j]; return s; }
+    var groups = [], byPid = {};
+    lines.forEach(function(l){
+      if(!byPid[l.pid]){ byPid[l.pid] = { price: Number(product(l.pid).price) || 0, lines: [] }; groups.push(byPid[l.pid]); }
+      byPid[l.pid].lines.push(l);
+    });
+    if(!groups.length || groups.some(function(g){ return g.price <= 0; })) return;
+    var n = groups.length, prices = groups.map(function(g){ return g.price; });
+    var mins = groups.map(function(g){ return g.lines.length; });
+    var q = mins.slice(), best = null, bestQ = null, steps = 0;
+    function rest(i){ var s = 0; for(var j=i; j<n; j++) s += prices[j] * mins[j]; return s; }
     (function rec(i, sum){
       if(++steps > 200000 || best === target) return;
       if(i === n - 1){
-        var k = Math.max(1, Math.ceil((target - sum) / prices[i]));
+        var k = Math.max(mins[i], Math.ceil((target - sum) / prices[i]));
         var tot = sum + k * prices[i];
         if(best === null || tot < best){ best = tot; q[i] = k; bestQ = q.slice(); }
         return;
       }
-      // 이 품목을 더 늘려도 남은 품목을 1개씩만 넣어 이미 넘으면 그 이상은 볼 필요 없음
-      var maxK = Math.max(1, Math.ceil((target - sum - rest(i + 1)) / prices[i]));
-      for(var k=1; k<=maxK; k++){ q[i] = k; rec(i + 1, sum + k * prices[i]); }
+      // 이 품목을 더 늘려도 남은 품목을 최소로만 넣어 이미 넘으면 그 이상은 볼 필요 없음
+      var maxK = Math.max(mins[i], Math.ceil((target - sum - rest(i + 1)) / prices[i]));
+      for(var k=mins[i]; k<=maxK; k++){ q[i] = k; rec(i + 1, sum + k * prices[i]); }
     })(0, 0);
-    if(bestQ) lines.forEach(function(l, i){ l.qty = bestQ[i]; });
+    if(!bestQ) return;
+    groups.forEach(function(g, gi){
+      g.lines.forEach(function(l, j){ l.qty = j === 0 ? bestQ[gi] - (g.lines.length - 1) : 1; });
+    });
+  }
+  // 한 양식(사유원/신라철강)에서 바꾼 품목 전체의 수량을 함께 다시 정한다.
+  // 바꾼 원래 품목들의 합계를 넘기면서 할인(넘치는 금액)이 가장 작게. 품목은 고른 그대로 둔다.
+  function optimizeForm(form){
+    var lines = [], target = 0;
+    state.rows.forEach(function(r){
+      var ls = state.swaps[r.key];
+      if(isViewRow(r) || !ls || !ls.length || formOf(r) !== form) return;
+      target += amount(r);
+      lines = lines.concat(ls);
+    });
+    if(lines.length) optimizeQtys(lines, target);
   }
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
   // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
@@ -892,14 +913,14 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var lines = state.swaps[c.r.key] = state.swaps[c.r.key] || [];
       if(b.getAttribute("data-sw") === "add") lines.push({ pid: swapOptions()[0].id, qty: 1 });
       else lines.splice(c.i, 1);
-      optimizeQtys(lines, amount(c.r));
+      optimizeForm(formOf(c.r));
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("change", function(e){
       if(e.target.getAttribute("data-sw") !== "pid") return;
       var c = ctx(e.target), lines = state.swaps[c.r.key];
       lines[c.i].pid = e.target.value;
-      optimizeQtys(lines, amount(c.r));
+      optimizeForm(formOf(c.r));
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("input", function(e){
