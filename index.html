@@ -697,29 +697,44 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       .sort(function(a, b){ return (rank(a) - rank(b)) || byKind(a, b); });
   }
   // 바꾼 품목들의 수량을 정한다: 각 1개 이상, 합계가 원래 금액 이상이면서 할인(넘치는 금액)이 가장 작게
-  // 같은 품목을 고른 줄은 하나로 묶어(최소 = 줄 수) 계산하고, 남는 수량은 첫 줄에 준다
+  // 품목별 최대 수량: 단체(시간)은 5개, 단체(개별)은 방문 인원까지. 그 외는 제한 없음
+  function maxQtyOf(pid){
+    var k = product(pid).kind;
+    if(k === "gtime") return 5;
+    if(k === "geach") return Number(state.pax) > 0 ? Number(state.pax) : Infinity;
+    return Infinity;
+  }
+  // 같은 품목을 고른 줄은 하나로 묶어(최소 = 줄 수, 최대 = 품목별 상한) 계산하고, 남는 수량은 첫 줄에 준다.
+  // 합계가 원래 금액 이상이면서 가장 작은 조합. 상한 때문에 닿지 못하면 가장 큰 조합(외부용 금액 부족 경고가 뜸)
   function optimizeQtys(lines, target){
     var groups = [], byPid = {};
     lines.forEach(function(l){
-      if(!byPid[l.pid]){ byPid[l.pid] = { price: Number(product(l.pid).price) || 0, lines: [] }; groups.push(byPid[l.pid]); }
+      if(!byPid[l.pid]){ byPid[l.pid] = { price: Number(product(l.pid).price) || 0, cap: maxQtyOf(l.pid), lines: [] }; groups.push(byPid[l.pid]); }
       byPid[l.pid].lines.push(l);
     });
     if(!groups.length || groups.some(function(g){ return g.price <= 0; })) return;
     var n = groups.length, prices = groups.map(function(g){ return g.price; });
     var mins = groups.map(function(g){ return g.lines.length; });
+    var caps = groups.map(function(g, i){ return Math.max(mins[i], g.cap); });
     var q = mins.slice(), best = null, bestQ = null, steps = 0;
+    function better(tot){
+      if(best === null) return true;
+      var ok = tot >= target, bok = best >= target;
+      if(ok !== bok) return ok;
+      return ok ? tot < best : tot > best;
+    }
     function rest(i){ var s = 0; for(var j=i; j<n; j++) s += prices[j] * mins[j]; return s; }
     (function rec(i, sum){
       if(++steps > 200000 || best === target) return;
       if(i === n - 1){
-        var k = Math.max(mins[i], Math.ceil((target - sum) / prices[i]));
+        var k = Math.min(caps[i], Math.max(mins[i], Math.ceil((target - sum) / prices[i])));
         var tot = sum + k * prices[i];
-        if(best === null || tot < best){ best = tot; q[i] = k; bestQ = q.slice(); }
+        if(better(tot)){ best = tot; q[i] = k; bestQ = q.slice(); }
         return;
       }
       // 이 품목을 더 늘려도 남은 품목을 최소로만 넣어 이미 넘으면 그 이상은 볼 필요 없음
-      var maxK = Math.max(mins[i], Math.ceil((target - sum - rest(i + 1)) / prices[i]));
-      for(var k=mins[i]; k<=maxK; k++){ q[i] = k; rec(i + 1, sum + k * prices[i]); }
+      var maxK = Math.min(caps[i], Math.max(mins[i], Math.ceil((target - sum - rest(i + 1)) / prices[i])));
+      for(var k=maxK; k>=mins[i]; k--){ q[i] = k; rec(i + 1, sum + k * prices[i]); }
     })(0, 0);
     if(!bestQ) return;
     groups.forEach(function(g, gi){
@@ -837,7 +852,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }).join("");
     return '<div class="swapline" data-i="' + i + '">' +
       '<select data-sw="pid">' + opts + '</select>' +
-      '<input type="number" min="1" step="1" inputmode="numeric" data-sw="qty" value="' + (l.qty || "") + '" aria-label="수량">' +
+      '<input type="number" min="1" step="1" inputmode="numeric" data-sw="qty" value="' + (l.qty || "") + '"' +
+        (isFinite(maxQtyOf(l.pid)) ? ' max="' + maxQtyOf(l.pid) + '" title="최대 ' + maxQtyOf(l.pid) + '개"' : '') + ' aria-label="수량">' +
       '<span class="lamt">' + won(swapLineAmount(l)) + '원</span>' +
       '<button class="iconbtn" type="button" data-sw="del" aria-label="바꿀 품목 빼기">✕</button>' +
     '</div>';
@@ -869,7 +885,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         return '<div class="line"><span>' + COMPANY[f].name + ' 외부용</span><span>' + won(t) + '원</span></div>' +
           '<div class="line small"><span>└ ' + (adj ? '할인 ' + won(-amount(adj)) + '원으로 맞춤' : ok ? '바꾼 품목 없음' : '') + '</span>' +
           '<span class="small" style="color:' + (ok ? 'var(--accent)' : 'var(--danger)') + '">' +
-          (ok ? '내부용 ' + won(real[f]) + '원과 같음' : '내부용보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘려 주세요') + '</span></div>';
+          (ok ? '내부용 ' + won(real[f]) + '원과 같음' : '내부용보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘리거나 품목을 더해 주세요') + '</span></div>';
       }).join("");
     });
     document.getElementById("swapsum").innerHTML = html;
@@ -903,6 +919,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       if(e.target.getAttribute("data-sw") !== "qty") return;
       var c = ctx(e.target), l = state.swaps[c.r.key][c.i];
       l.qty = e.target.value === "" ? 0 : Number(e.target.value);
+      var cap = maxQtyOf(l.pid);
+      if(l.qty > cap){ l.qty = cap; e.target.value = cap; }   // 단체(시간) 5개, 단체(개별) 방문 인원까지
       e.target.closest(".swapline").querySelector(".lamt").textContent = won(swapLineAmount(l)) + "원";
       renderSwapSum(); renderDoc();
     });
@@ -1182,7 +1200,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
     if(!issueDate()) return "발행일을 입력해 주세요.";
     if(state.docType === "quote" && state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
-    if(kind === "fake" && fakeShort().length) return "외부용 금액이 내부용보다 적습니다. 바꾼 품목의 수량을 늘려 주세요.";
+    if(kind === "fake" && fakeShort().length) return "외부용 금액이 내부용보다 적습니다. 바꾼 품목의 수량을 늘리거나 품목을 더해 주세요.";
     return null;
   }
 
