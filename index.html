@@ -218,6 +218,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .swapline input{text-align:right}
 .swapline .lamt{text-align:right; font-size:12.5px; font-variant-numeric:tabular-nums}
 .swaplock{font-size:12px; color:var(--faint)}
+.swapline input.fixed{border-color:var(--accent); background:var(--accent-soft)}
 .suggest{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 4px;
   padding:8px 10px; border-radius:6px; background:var(--accent-soft); font-size:12.5px}
 #editarea{margin-top:16px}
@@ -750,8 +751,22 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(r && !r.ok) r = solveQtys(lines, target, GTIME_MAX) || r;
     return r;
   }
+  // 직접 입력한 수량(fixed)은 그대로 두고, 나머지 줄만 할인이 가장 적게 다시 맞춘다
+  function solveLocked(lines, target){
+    var fixedSum = 0, free = [], at = [];
+    lines.forEach(function(l, i){
+      if(l.fixed){ fixedSum += swapLineAmount(l); } else { free.push(l); at.push(i); }
+    });
+    var qtys = lines.map(function(l){ return Number(l.qty) || 0; });
+    if(!free.length) return { tot: fixedSum, ok: fixedSum >= target, qtys: qtys };
+    var r = solveFit(free, target - fixedSum);
+    if(!r) return null;
+    at.forEach(function(li, j){ qtys[li] = r.qtys[j]; });
+    var tot = r.tot + fixedSum;
+    return { tot: tot, ok: tot >= target, qtys: qtys };
+  }
   function optimizeQtys(lines, target){
-    var r = solveFit(lines, target);
+    var r = solveLocked(lines, target);
     if(r) lines.forEach(function(l, i){ l.qty = r.qtys[i]; });
   }
   function formSwap(form){
@@ -774,13 +789,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function suggestEach(form){
     var s = formSwap(form);
     if(!s.lines.length) return null;
-    var now = solveFit(s.lines, s.target);
+    var now = solveLocked(s.lines, s.target);
     if(!now || now.ok) return null;
     var best = null;
     var orig = s.rows.map(function(r){ return r.pid; });   // 바꾸려던 원래 품목은 추천하지 않는다
     swapOptions().filter(function(p){ return p.kind === "geach" && orig.indexOf(p.id) < 0; }).forEach(function(p){
-      var trial = s.lines.map(function(l){ return { pid: l.pid }; }).concat([{ pid: p.id }]);
-      var r = solveFit(trial, s.target);
+      var trial = s.lines.map(function(l){ return { pid: l.pid, qty: l.qty, fixed: l.fixed }; }).concat([{ pid: p.id }]);
+      var r = solveLocked(trial, s.target);
       if(!r) return;
       if(!best || (r.ok && !best.r.ok) || (r.ok === best.r.ok && (r.ok ? r.tot < best.r.tot : r.tot > best.r.tot))) best = { p: p, r: r };
     });
@@ -885,7 +900,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }).join("");
     return '<div class="swapline" data-i="' + i + '">' +
       '<select data-sw="pid">' + opts + '</select>' +
-      '<input type="number" min="1" step="1" inputmode="numeric" data-sw="qty" value="' + (l.qty || "") + '"' +
+      '<input type="number" min="1" step="1" inputmode="numeric" data-sw="qty"' + (l.fixed ? ' class="fixed"' : '') + ' value="' + (l.qty || "") + '"' +
         (isFinite(maxQtyOf(l.pid)) ? ' max="' + maxQtyOf(l.pid) + '" title="최대 ' + maxQtyOf(l.pid) + '개"' : '') + ' aria-label="수량">' +
       '<span class="lamt">' + won(swapLineAmount(l)) + '원</span>' +
       '<button class="iconbtn" type="button" data-sw="del" aria-label="바꿀 품목 빼기">✕</button>' +
@@ -960,9 +975,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("change", function(e){
-      if(e.target.getAttribute("data-sw") !== "pid") return;
-      var c = ctx(e.target), lines = state.swaps[c.r.key];
-      lines[c.i].pid = e.target.value;
+      var sw = e.target.getAttribute("data-sw");
+      if(sw !== "pid" && sw !== "qty") return;
+      var c = ctx(e.target), lines = state.swaps[c.r.key], l = lines[c.i];
+      if(sw === "pid"){ l.pid = e.target.value; l.fixed = false; }   // 품목을 바꾸면 그 줄은 다시 자동
+      // 수량을 직접 고치면 그 줄은 고정하고 나머지를 다시 맞춘다. 비우면 자동으로 돌아감
+      else l.fixed = e.target.value !== "";
       optimizeForm(formOf(c.r));
       renderFakePanel(); renderDoc();
     });
