@@ -1265,6 +1265,15 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   // ---------- Excel ----------
   var XLFONT = "맑은 고딕";
+  // 엑셀(100%)에서 맑은 고딕 글자가 차지하는 너비(px)
+  function xlTextWidth(text, pt, bold){
+    try{
+      var cv = xlTextWidth.cv || (xlTextWidth.cv = document.createElement("canvas"));
+      var ctx = cv.getContext("2d");
+      ctx.font = (bold ? "bold " : "") + (pt * 4 / 3) + "px 'Malgun Gothic', '맑은 고딕', sans-serif";
+      return ctx.measureText(text).width;
+    } catch(e){ return String(text).length * pt; }
+  }
   var GREY = "FFD9D9D9";
 
   function ensureExcel(){
@@ -1417,12 +1426,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       after = next + 1;
     }
 
-    // 직인
+    // 직인: 미리보기처럼 발신 회사명 끝에 20px 겹치고, 발신 줄 세로 가운데에 놓는다.
+    // ExcelJS의 소수 열/행 위치는 실제 픽셀과 어긋나므로 EMU(1px = 9525)로 직접 지정한다.
     try{
       var imgId = wb.addImage({ base64: SEAL[form].split(",")[1], extension:"png" });
+      var SW = 62, SH = 64, EMU = 9525;
+      var textW = xlTextWidth(right[0], 11, true);
+      var x = Math.max(0, Math.round(3 + textW - 20));           // 셀 왼쪽 여백 약 3px
+      var prevH = (ws.getRow(mr-1).height || 15) * 4 / 3;          // 발신 윗줄 높이(px)
+      var lineH = (ws.getRow(mr).height || 15) * 4 / 3;            // 발신 줄 높이(px)
+      var y = Math.round(prevH + lineH / 2 - SH / 2);              // 윗줄 맨 위에서부터
       ws.addImage(imgId, {
-        tl: { col: CN - 1 + 0.44, row: mr - 1.35 },
-        ext: { width:62, height:64 }, editAs:"oneCell"
+        tl: { nativeCol: CN - 1, nativeColOff: x * EMU, nativeRow: mr - 2, nativeRowOff: y * EMU },
+        ext: { width:SW, height:SH }, editAs:"oneCell"
       });
     } catch(e){}
     return after;
