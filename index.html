@@ -218,6 +218,25 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .swapline input{text-align:right}
 .swapline .lamt{text-align:right; font-size:12.5px; font-variant-numeric:tabular-nums}
 .swaplock{font-size:12px; color:var(--faint)}
+#fakepanel{overflow:visible}
+#fakepanel > h2{border-radius:10px 10px 0 0}
+.info{position:relative; display:inline-flex}
+.infobtn{
+  width:20px; height:20px; border-radius:50%; border:1px solid var(--line-strong); background:var(--surface);
+  font:italic 700 12px/1 Georgia, serif; color:var(--muted); cursor:help; padding:0;
+  display:inline-flex; align-items:center; justify-content:center; letter-spacing:0;
+}
+.infobtn:hover, .infobtn:focus-visible{color:var(--accent); border-color:var(--accent); outline:none}
+.info .tip{
+  position:absolute; right:0; top:calc(100% + 8px); z-index:30; width:340px; max-width:calc(100vw - 48px);
+  padding:12px 14px; border-radius:8px; background:var(--surface); border:1px solid var(--line-strong);
+  box-shadow:0 8px 24px rgba(0,0,0,.14); color:var(--ink, #222); font-size:12.5px; font-weight:400;
+  letter-spacing:0; line-height:1.6; text-align:left; visibility:hidden; opacity:0; transition:opacity .12s;
+}
+.info .tip b{font-weight:700}
+.info .tip ul{margin:6px 0 0; padding-left:17px}
+.info .tip li + li{margin-top:3px}
+.info:hover .tip, .info:focus-within .tip{visibility:visible; opacity:1}
 .swapline input.fixed{border-color:var(--accent); background:var(--accent-soft)}
 .suggest{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 4px;
   padding:8px 10px; border-radius:6px; background:var(--accent-soft); font-size:12.5px}
@@ -324,9 +343,26 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
       <!-- 외부용: 품목을 다른 품목으로 바꾸고, 늘어난 금액은 할인으로 맞춘다 -->
       <section class="panel" id="fakepanel" hidden>
-        <h2>외부용 품목 바꾸기</h2>
+        <h2>외부용 품목 바꾸기
+          <span class="info">
+            <button class="infobtn" type="button" aria-label="바꾸는 기준 보기" aria-describedby="swap-rules">i</button>
+            <span class="tip" id="swap-rules" role="tooltip">
+              <b>바꾸는 기준</b>
+              <ul>
+                <li>관람은 바꿀 수 없습니다.</li>
+                <li>한 품목을 여러 품목으로 바꿀 수 있습니다. 단가는 품목 관리의 정상가 그대로입니다.</li>
+                <li>수량은 양식(사유원 · 신라철강)마다 바꾼 품목 전체 금액을 기준으로, 할인이 가장 적게 나오도록 자동으로 정합니다.</li>
+                <li><b>단체(시간)</b>은 3개 안에서 먼저 맞추고, 안 되면 최대 5개까지 늘립니다.</li>
+                <li><b>단체(개별)</b>은 최대 방문 인원수까지입니다.</li>
+                <li>5개로도 모자라면 할인이 가장 적게 맞춰지는 단체(개별) 품목을 추천합니다. ‘더하기’를 누르면 들어갑니다.</li>
+                <li>수량을 직접 고치면 그 줄은 고정(초록 칸)되고 나머지가 다시 맞춰집니다. 칸을 비우면 다시 자동입니다.</li>
+                <li>같은 품목으로 바꾼 줄은 견적서에 한 줄로 합쳐집니다.</li>
+                <li>내부용보다 늘어난 금액은 양식마다 ‘할인’ 한 줄로 맞춰 합계가 내부용과 같아집니다. 모자라면 출력되지 않습니다.</li>
+              </ul>
+            </span>
+          </span>
+        </h2>
         <div class="body">
-          <span class="hint">관람은 바꿀 수 없습니다. 한 품목을 여러 품목으로 바꿀 수 있고, 할인이 가장 적게 나오도록 수량을 자동으로 정합니다. 내부용보다 늘어난 금액은 ‘할인’ 줄로 맞추고, 단가는 품목 관리 가격 그대로입니다.</span>
           <div id="swaplist" style="display:flex;flex-direction:column;gap:10px"></div>
           <div id="swapsum" class="summary"></div>
         </div>
