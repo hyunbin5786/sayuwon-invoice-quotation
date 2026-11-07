@@ -427,9 +427,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <button class="btn primary" type="button" id="cat-add">+ 품목 직접 추가</button>
       <button class="btn danger" type="button" id="cat-bulk" disabled>선택 삭제</button>
       <button class="btn" type="button" id="cat-reset">기본값으로</button>
+      <button class="btn primary" type="button" id="cat-upload" hidden title="이 브라우저에서 예전에 고친 품목 목록으로 공유 목록을 통일합니다">이 컴퓨터 목록으로 통일</button>
       <button class="iconbtn" type="button" id="cat-close" aria-label="닫기">✕</button>
     </div>
-    <p class="cathint">예약 상품명이 같으면 자동 채우기에서 그 품목으로 들어갑니다. ‘관람+식사’는 관람(사유원)과 식사(신라철강)로 나뉘고, 식사 단가는 정상가에서 관람료를 뺀 금액입니다. 수정한 내용은 이 브라우저에 저장됩니다.</p>
+    <p class="cathint">예약 상품명이 같으면 자동 채우기에서 그 품목으로 들어갑니다. ‘관람+식사’는 관람(사유원)과 식사(신라철강)로 나뉘고, 식사 단가는 정상가에서 관람료를 뺀 금액입니다. <span id="cat-sync">수정한 내용은 이 브라우저에 저장됩니다.</span></p>
     <div class="catscroll">
       <table class="cattable">
         <thead><tr>
@@ -575,10 +576,61 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return (KIND_ORDER[a.kind] - KIND_ORDER[b.kind]) || String(a.src).localeCompare(String(b.src), "ko");
   }
 
-  // 품목 관리에서 바꾼 내용은 이 브라우저에만 저장: { edits:{예약상품명:{…}}, added:[{uid,…}] }
-  var CAT_KEY = "sy_catalog_v1";
-  var catEdits = (function(){ try { return JSON.parse(localStorage.getItem(CAT_KEY) || "{}"); } catch(e){ return {}; } })();
-  function saveCatEdits(){ try { localStorage.setItem(CAT_KEY, JSON.stringify(catEdits)); } catch(e){} }
+  // 품목 관리에서 바꾼 내용: { edits:{예약상품명:{…}}, added:[{uid,…}] }
+  // SHARED_URL(구글 시트 Apps Script 웹 앱)이 있으면 모두가 같은 목록을 쓰고, 없으면 이 브라우저에만 저장
+  var SHARED_URL = "";
+  var CAT_KEY = "sy_catalog_v1";            // 예전: 브라우저마다 따로 저장하던 목록
+  var SHARED_CACHE = "sy_catalog_shared";   // 공유 목록을 바로 띄우기 위한 사본
+  function readLS(k){ try { return JSON.parse(localStorage.getItem(k) || "{}") || {}; } catch(e){ return {}; } }
+  function hasEdits(d){ return !!d && (Object.keys(d.edits || {}).length > 0 || (d.added || []).length > 0); }
+  var legacyEdits = readLS(CAT_KEY);
+  var catEdits = SHARED_URL ? readLS(SHARED_CACHE) : legacyEdits;
+  function saveCatEdits(){ try { localStorage.setItem(SHARED_URL ? SHARED_CACHE : CAT_KEY, JSON.stringify(catEdits)); } catch(e){} }
+
+  // ---- 공유 목록 동기화: 바꾼 내용을 작업(op) 단위로 보내 서버에서 합친다 ----
+  var syncQ = [], syncTimer = null, syncBusy = false, syncState = "";
+  function setSync(s){ syncState = s; var el = document.getElementById("cat-sync"); if(el) el.textContent = syncText(); }
+  function syncText(){
+    if(!SHARED_URL) return "수정한 내용은 이 브라우저에 저장됩니다.";
+    return { saving:"공유 목록에 저장 중…", error:"공유 목록에 저장하지 못했습니다. 인터넷 연결을 확인해 주세요.", loading:"공유 목록을 불러오는 중…" }[syncState] ||
+      "공유 목록입니다. 고친 내용은 모두에게 바로 반영됩니다.";
+  }
+  function queueOp(op){
+    if(!SHARED_URL) return;
+    syncQ.push(op); setSync("saving");
+    clearTimeout(syncTimer); syncTimer = setTimeout(flushOps, 700);   // 타이핑 중에는 모아서 한 번에
+  }
+  function applyShared(data){
+    catEdits = data || {}; saveCatEdits(); buildCatalog();
+    if(!elCatModal().hidden && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#cat-body"))) renderCatalog();
+    paintUpload();
+  }
+  function flushOps(){
+    if(syncBusy || !syncQ.length) return;
+    var ops = syncQ; syncQ = []; syncBusy = true;
+    fetch(SHARED_URL, { method:"POST", body: JSON.stringify({ ops: ops }) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        syncBusy = false;
+        if(res && res.ok === false) throw new Error(res.error || "save failed");
+        if(syncQ.length){ flushOps(); return; }
+        if(ops.some(function(o){ return o.op === "replace"; })){ try { localStorage.removeItem(CAT_KEY); } catch(e){} legacyEdits = {}; }
+        applyShared(res.data); setSync("");
+      })
+      .catch(function(){ syncBusy = false; syncQ = ops.concat(syncQ); setSync("error"); setTimeout(flushOps, 5000); });
+  }
+  function pullShared(){
+    if(!SHARED_URL || syncQ.length || syncBusy) return;
+    fetch(SHARED_URL).then(function(r){ return r.json(); })
+      .then(function(res){ if(!syncQ.length && !syncBusy && res && res.data) { applyShared(res.data); setSync(""); } })
+      .catch(function(){});
+  }
+  function elCatModal(){ return document.getElementById("catalog-modal"); }
+  // 예전에 이 브라우저에서 고친 목록이 있으면, 그 목록으로 공유 목록을 통일할 수 있게
+  function paintUpload(){
+    var b = document.getElementById("cat-upload"); if(!b) return;
+    b.hidden = !(SHARED_URL && hasEdits(legacyEdits));
+  }
 
   var CATALOG = [];
   function buildCatalog(){
@@ -607,6 +659,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     CATALOG = list;
   }
   buildCatalog();
+  if(SHARED_URL){
+    pullShared();
+    window.addEventListener("focus", pullShared);   // 다른 탭·창에서 돌아오면 최신 목록으로
+  }
 
   function product(id){
     for(var i=0;i<CATALOG.length;i++){ if(CATALOG[i].id === id) return CATALOG[i]; }
@@ -1778,12 +1834,15 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // 바꾼 값 저장: 기본 품목은 예약 상품명 기준으로, 추가한 품목은 그 자체를 고친다
   function setCat(id, field, value){
     if(id.indexOf("u:") === 0){
-      (catEdits.added || []).forEach(function(a){ if("u:" + a.uid === id) a[field] = value; });
+      var uid = id.slice(2);
+      (catEdits.added || []).forEach(function(a){ if(String(a.uid) === uid) a[field] = value; });
+      queueOp({ op:"setAdded", uid: uid, field: field, value: value });
     } else {
       var src = product(id).src;
       catEdits.edits = catEdits.edits || {};
       catEdits.edits[src] = catEdits.edits[src] || {};
       catEdits.edits[src][field] = value;
+      queueOp({ op:"set", src: src, field: field, value: value });
     }
     saveCatEdits(); buildCatalog();
   }
@@ -1791,6 +1850,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function removeCat(id){
     if(id.indexOf("u:") === 0){
       catEdits.added = (catEdits.added || []).filter(function(a){ return "u:" + a.uid !== id; });
+      queueOp({ op:"delAdded", uid: id.slice(2) });
       saveCatEdits(); buildCatalog();
     } else setCat(id, "hidden", true);
   }
@@ -1897,20 +1957,30 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("cat-search").addEventListener("input", renderCatalog);
   document.getElementById("cat-add").addEventListener("click", function(){
     catEdits.added = catEdits.added || [];
-    catEdits.added.unshift({ uid: Date.now(), src:"", name:"", kind:"food", form:"shilla", price:null, disc:false });
+    var item = { uid: Date.now(), src:"", name:"", kind:"food", form:"shilla", price:null, disc:false };
+    catEdits.added.unshift(item);
+    queueOp({ op:"add", item: Object.assign({}, item) });
     saveCatEdits(); buildCatalog();
     document.getElementById("cat-search").value = "";
     renderCatalog();
     var first = document.querySelector('#cat-body input[data-f="src"]'); if(first) first.focus();
   });
   document.getElementById("cat-reset").addEventListener("click", function(){
-    if(!confirm("품목 관리에서 바꾸거나 추가한 내용을 모두 지우고 기본 품목 리스트로 되돌릴까요?")) return;
-    catEdits = {}; saveCatEdits(); buildCatalog(); renderCatalog();
+    if(!confirm("품목 관리에서 바꾸거나 추가한 내용을 모두 지우고 기본 품목 리스트로 되돌릴까요?" + (SHARED_URL ? "\n공유 목록이라 모두에게 적용됩니다." : ""))) return;
+    catEdits = {}; queueOp({ op:"reset" }); saveCatEdits(); buildCatalog(); renderCatalog();
+  });
+  document.getElementById("cat-upload").addEventListener("click", function(){
+    if(!confirm("이 컴퓨터에서 고친 품목 목록으로 공유 목록 전체를 바꿀까요?\n다른 사람이 공유 목록에서 바꾼 내용은 이 목록으로 덮어씁니다.")) return;
+    catEdits = JSON.parse(JSON.stringify(legacyEdits));
+    queueOp({ op:"replace", data: catEdits });
+    saveCatEdits(); buildCatalog(); renderCatalog();
+    document.getElementById("cat-upload").hidden = true;
   });
   function closeCatalog(){ elCat.hidden = true; renderRows(); renderDoc(); }
   document.getElementById("open-catalog").addEventListener("click", function(){
     document.getElementById("cat-search").value = "";
     picked = {}; renderCatalog(); elCat.hidden = false;
+    paintUpload(); setSync(syncState); pullShared();   // 열 때마다 최신 공유 목록으로
     document.getElementById("cat-search").focus();
   });
   document.getElementById("cat-close").addEventListener("click", closeCatalog);
