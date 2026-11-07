@@ -1137,6 +1137,18 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
 
   // ---------- document rendering ----------
+  // 같은 품명이 이어지는 줄은 품명 칸을 하나로 합친다: 첫 줄 = 합칠 줄 수, 나머지 = 0
+  function nameSpans(rows){
+    var sp = rows.map(function(){ return 1; });
+    for(var i=0;i<rows.length;){
+      var j = i + 1;
+      while(j < rows.length && !rows[i].adj && !rows[j].adj && rows[i].name && rows[j].name === rows[i].name && rows[j].pid === rows[i].pid) j++;
+      sp[i] = j - i;
+      for(var k=i+1;k<j;k++) sp[k] = 0;
+      i = j;
+    }
+    return sp;
+  }
   function sheetHTML(form){
     var c = COMPANY[form], rows = rowsOf(form), total = totalOf(form);
     var isSay = form === "sayuwon";
@@ -1145,8 +1157,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       : ['품  명','인원, 시간','단가','금 액','비  고'];
     var widths = isSay ? ['24%','9%','11%','11%','15%','30%'] : ['26%','12%','13%','16%','33%'];
     var minRows = MIN_ROWS[form];
-    var body = "";
-    rows.forEach(function(r){
+    var body = "", spans = nameSpans(rows);
+    function nameTd(i, r){
+      return spans[i] === 0 ? '' : '<td' + (spans[i] > 1 ? ' rowspan="' + spans[i] + '"' : '') + '>' + esc(r.name) + '</td>';
+    }
+    rows.forEach(function(r, ri){
       if(r.adj){   // 외부용 할인 줄: 품명과 금액만
         body += '<tr><td>' + esc(r.name) + '</td>' + (isSay ? '<td></td><td></td><td></td>' : '<td></td><td></td>') +
           '<td class="num">' + won(amount(r)) + '</td><td class="note">' + esc(r.note) + '</td></tr>';
@@ -1154,7 +1169,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       }
       if(isSay){
         body += '<tr>' +
-          '<td>'+esc(r.name)+'</td>' +
+          nameTd(ri, r) +
           '<td class="ctr">'+(r.qty ? won(r.qty) : "")+'</td>' +
           '<td class="num">'+(r.price ? won(r.price) : "")+'</td>' +
           '<td class="num">'+(r.price ? won(Number(r.rate) ? discPrice(r) : 0) : "")+'</td>' +
@@ -1162,7 +1177,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           '<td class="note">'+esc(r.note)+'</td></tr>';
       } else {
         body += '<tr>' +
-          '<td>'+esc(r.name)+'</td>' +
+          nameTd(ri, r) +
           '<td class="ctr">'+(r.qty ? won(r.qty) : "")+'</td>' +
           '<td class="num">'+(r.price ? won(discPrice(r)) : "")+'</td>' +
           '<td class="num">'+(amount(r) ? won(amount(r)) : "")+'</td>' +
@@ -1545,6 +1560,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         }, hr, lastRow);
       });
     }
+    // 같은 품명이 이어지면 품명 칸을 세로로 합친다
+    nameSpans(rows).forEach(function(n, k){
+      if(n > 1) ws.mergeCells(hr + 1 + k, C0, hr + k + n, C0);
+    });
 
     // 합계
     ws.getRow(lastRow).height = 30;
@@ -1694,14 +1713,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var out = [];
       rows.forEach(function(r){
         if(!r.disc){ r.rate = 0; r.tRate = true; r.note = ""; out.push(r); return; }
-        var left = Number(r.qty) || 0;
+        var left = Number(r.qty) || 0, parts = [];
         groups.forEach(function(g){
           var n = Math.min(g.qty, left); if(n <= 0) return;
           left -= n;
-          var x = Object.assign({}, r, { key: uid++, qty: n, rate: g.pct, tRate: true, note: g.note, tNote: true });
-          out.push(x);
+          parts.push(Object.assign({}, r, { key: uid++, qty: n, rate: g.pct, tRate: true, note: g.note, tNote: true }));
         });
-        if(left > 0){ r.qty = left; r.rate = 0; r.tRate = true; r.note = ""; out.push(r); }   // 할인 없는 인원
+        if(left > 0){ r.qty = left; r.rate = 0; r.tRate = true; r.note = ""; parts.push(r); }   // 할인 없는 인원
+        // 같은 품목 안에서는 수량 많은 줄부터
+        parts.sort(function(a, c){ return (Number(c.qty) || 0) - (Number(a.qty) || 0); });
+        out = out.concat(parts);
       });
       return out;
     }
