@@ -1720,8 +1720,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
           parts.push(Object.assign({}, r, { key: uid++, qty: n, rate: g.pct, tRate: true, note: g.note, tNote: true }));
         });
         if(left > 0){ r.qty = left; r.rate = 0; r.tRate = true; r.note = ""; parts.push(r); }   // 할인 없는 인원
-        // 같은 품목 안에서는 수량 많은 줄부터
-        parts.sort(function(a, c){ return (Number(c.qty) || 0) - (Number(a.qty) || 0); });
+        // 같은 품목 안에서는 수량 많은 줄부터, 수량이 같으면 할인율 작은 줄부터
+        parts.sort(function(a, c){ return (Number(c.qty) || 0) - (Number(a.qty) || 0) || (Number(a.rate) || 0) - (Number(c.rate) || 0); });
         out = out.concat(parts);
       });
       return out;
