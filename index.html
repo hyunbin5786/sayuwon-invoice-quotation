@@ -1626,6 +1626,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     return { blocks: blocks, visitor: visitor };
   }
 
+  // "* 군위주민(50%) 성인 1명 50% - 34,500()" → { qty:1, pct:50, note:"군위주민 할인 50% 적용" }
+  function discGroups(notes){
+    var out = [];
+    notes.forEach(function(s){
+      var m = s.match(/^(.*?)\s*(?:성인|어른|대인|청소년|어린이|소인|아동|경로|유아)?\s*(\d+)\s*명\s+(\d+(?:\.\d+)?)\s*%/);
+      if(!m) return;
+      var name = m[1].replace(/\(\s*\d+(?:\.\d+)?\s*%\s*\)/g, "").trim();
+      var pct = Number(m[3]);
+      out.push({ qty: Number(m[2]), pct: pct, note: (name ? name + " " : "") + "할인 " + pct + "% 적용" });
+    });
+    return out;
+  }
+
   function isWeekend(iso){
     if(!iso) return false;
     var p = iso.split("-"), d = new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
@@ -1674,6 +1687,24 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(b.price && gross !== b.price){
       warns.push('"' + b.product + '" : 품목 단가 합계 ' + won(gross) + '원과 상품금액 ' + won(b.price) + '원이 다릅니다.');
     }
+    // 할인 종류가 인원별로 적혀 있으면 (* 군위주민(50%) 성인 1명 50% - 34,500)
+    // 할인 대상 품목을 같은 품명 · 다른 수량 · 다른 할인율의 여러 줄로 나눈다
+    var groups = discGroups(b.notes);
+    if(groups.length){
+      var out = [];
+      rows.forEach(function(r){
+        if(!r.disc){ r.rate = 0; r.tRate = true; r.note = ""; out.push(r); return; }
+        var left = Number(r.qty) || 0;
+        groups.forEach(function(g){
+          var n = Math.min(g.qty, left); if(n <= 0) return;
+          left -= n;
+          var x = Object.assign({}, r, { key: uid++, qty: n, rate: g.pct, tRate: true, note: g.note, tNote: true });
+          out.push(x);
+        });
+        if(left > 0){ r.qty = left; r.rate = 0; r.tRate = true; r.note = ""; out.push(r); }   // 할인 없는 인원
+      });
+      return out;
+    }
     // 할인: 예약에 적힌 % 를 그대로 쓰고, 할인 대상 품목에만 적용
     var pctM = b.notes.join(" ").match(/(\d+(?:\.\d+)?)\s*%/);
     var pct = pctM ? Number(pctM[1]) : 0;
@@ -1708,8 +1739,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     state.quoteDate = state.useDate && todayISO() > state.useDate ? state.useDate : todayISO();
     // 방문자 이름은 수신으로. 수신 담당자는 필요할 때만 직접 입력 (비우면 '담당자님')
     if(res.visitor) state.client = res.visitor;
-    var viewQty = rows.filter(function(r){ return r.form === "sayuwon"; }).map(function(r){ return Number(r.qty)||0; });
-    state.pax = Math.max.apply(null, viewQty.length ? viewQty : rows.map(function(r){ return Number(r.qty)||0; }));
+    // 할인 종류별로 줄이 나뉘어도 인원은 예약인원 기준
+    state.pax = Math.max.apply(null, res.blocks.map(function(b){ return Number(b.qty)||0; }).concat(rows.map(function(r){ return Number(r.qty)||0; })));
     paint();
 
     var booked = res.blocks.reduce(function(s,b){ return s + (b.amount || b.price); }, 0);
