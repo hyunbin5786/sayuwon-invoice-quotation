@@ -578,7 +578,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
   // 품목 관리에서 바꾼 내용: { edits:{예약상품명:{…}}, added:[{uid,…}] }
   // SHARED_URL(구글 시트 Apps Script 웹 앱)이 있으면 모두가 같은 목록을 쓰고, 없으면 이 브라우저에만 저장
-  var SHARED_URL = "";
+  var SHARED_URL = "https://script.google.com/macros/s/AKfycbyFMeWFtokUB9FW44ZRrOMssIA_2jJzKC9dhjDR7c4WgdPxsaqzT1aLbLWmpIwvVMmY/exec";
   var CAT_KEY = "sy_catalog_v1";            // 예전: 브라우저마다 따로 저장하던 목록
   var SHARED_CACHE = "sy_catalog_shared";   // 공유 목록을 바로 띄우기 위한 사본
   function readLS(k){ try { return JSON.parse(localStorage.getItem(k) || "{}") || {}; } catch(e){ return {}; } }
