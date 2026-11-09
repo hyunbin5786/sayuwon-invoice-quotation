@@ -1136,7 +1136,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 
     bindText(card, r, "name", "tName");
     bindText(card, r, "note", "tNote");
-    bindNum(card, r, "qty", "tQty");
+    bindNum(card, r, "qty", "tQty", function(){ r.qtyFixed = true; });   // 직접 고친 수량은 인원 변경을 따라가지 않음
     bindNum(card, r, "price", null);
     bindNum(card, r, "rate", "tRate", function(){
       if(!r.tNote){
@@ -1180,7 +1180,32 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
 
   // 인원이 바뀌면 손대지 않은 행의 수량·할인율·비고를 다시 맞춘다
+  // 예약에서 들어온 품목: 품목(할인별로 나뉜 줄 묶음) 수량 합이 원래 인원과 같았으면 새 인원을 따라간다.
+  // 늘거나 준 인원은 그 품목에서 수량이 가장 많은 줄(보통 사전예약 할인 줄)에 더하고 뺀다.
+  // 기준(paxBase · baseQty)은 예약을 채울 때 잡아 두고, 입력 중 "1" 같은 중간 값에 흔들리지 않게 매번 기준에서 다시 계산
+  var paxBase = null;
+  function snapPax(){ paxBase = state.pax; state.rows.forEach(function(r){ r.baseQty = Number(r.qty) || 0; }); }
+  function followPax(){
+    var newPax = Number(state.pax) || 0, base = Number(paxBase) || 0;
+    if(!base || !newPax) return;
+    var groups = {};
+    state.rows.forEach(function(r){
+      if(!r.tQty || r.qtyFixed || r.baseQty == null) return;
+      var g = r.grp != null ? r.grp : r.key;
+      (groups[g] = groups[g] || []).push(r);
+    });
+    Object.keys(groups).forEach(function(g){
+      var rs = groups[g];
+      if(rs.reduce(function(s, r){ return s + r.baseQty; }, 0) !== base) return;
+      rs.forEach(function(r){ r.qty = r.baseQty; });
+      var delta = newPax - base;
+      var order = rs.slice().sort(function(a, b){ return b.baseQty - a.baseQty; });
+      if(delta >= 0) order[0].qty += delta;
+      else order.forEach(function(r){ var t = Math.min(r.qty, -delta); r.qty -= t; delta += t; });
+    });
+  }
   function applyPax(){
+    followPax();
     state.rows.forEach(function(r){
       if(!r.tQty) r.qty = state.pax;
       if(!r.tRate){
@@ -1764,6 +1789,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     }
     // 할인 종류가 인원별로 적혀 있으면 (* 군위주민(50%) 성인 1명 50% - 34,500)
     // 할인 대상 품목을 같은 품명 · 다른 수량 · 다른 할인율의 여러 줄로 나눈다
+    rows.forEach(function(r){ r.grp = r.key; });   // 할인별로 나뉘어도 한 품목으로 묶어 인원 변경을 따라가게
     var groups = discGroups(b.notes);
     if(groups.length){
       var out = [];
@@ -2027,6 +2053,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById("f-usedate").value = state.useDate;
     document.getElementById("f-sender").value = state.sender;
     document.getElementById("f-pax").value = state.pax == null ? "" : state.pax;
+    snapPax();
     document.getElementById("f-footnote").value = state.footnote;
     renderRows();
     renderDoc();
