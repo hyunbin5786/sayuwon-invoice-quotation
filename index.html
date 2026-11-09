@@ -253,6 +253,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   color:var(--muted); font-size:13px; background:var(--surface);
 }
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+.kobtn{min-width:40px; font-weight:700; padding-left:10px; padding-right:10px}
+.kobtn.on{background:var(--accent); border-color:var(--accent); color:#fff}
 </style>
 
 <div class="wrap">
@@ -264,6 +266,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     <div class="rulechips">
       <span class="chip green">수목원 관람 · 면세 · 5%/10% 자동</span>
       <span class="chip steel">식음업장 · VAT 10% · 사담 다이닝만 할인</span>
+      <button class="btn kobtn" type="button" id="ko-toggle" aria-pressed="true">한</button>
       <button class="btn" type="button" id="open-catalog">품목 관리</button>
     </div>
   </header>
@@ -445,6 +448,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hangul-js@0.2.6/hangul.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -2099,6 +2103,76 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("out-real").addEventListener("click", function(){ makeOutput(); });
 
   paint();
+})();
+
+// ---------- 한글 자동 입력 ----------
+// 컴퓨터 입력기가 영문 상태여도 글자 칸에서는 두벌식 한글로 바꿔 넣는다.
+// 영어가 필요하면 위쪽 "한/A" 버튼이나 Shift+Space로 끄고 켠다. (입력기가 이미 한글이면 손대지 않음)
+(function(){
+  var KEY = "sy_ko_input";
+  var on = (function(){ try { return localStorage.getItem(KEY) !== "0"; } catch(e){ return true; } })();
+  var MAP = { q:"ㅂ", w:"ㅈ", e:"ㄷ", r:"ㄱ", t:"ㅅ", y:"ㅛ", u:"ㅕ", i:"ㅑ", o:"ㅐ", p:"ㅔ",
+              a:"ㅁ", s:"ㄴ", d:"ㅇ", f:"ㄹ", g:"ㅎ", h:"ㅗ", j:"ㅓ", k:"ㅏ", l:"ㅣ",
+              z:"ㅋ", x:"ㅌ", c:"ㅊ", v:"ㅍ", b:"ㅠ", n:"ㅜ", m:"ㅡ",
+              Q:"ㅃ", W:"ㅉ", E:"ㄸ", R:"ㄲ", T:"ㅆ", O:"ㅒ", P:"ㅖ" };
+  var btn = document.getElementById("ko-toggle");
+  function paintBtn(){
+    btn.textContent = on ? "한" : "A";
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.title = on ? "한글 입력 중 · 영문 자판으로 쳐도 한글로 바뀝니다 (Shift+Space로 영어)" : "영어 입력 중 (Shift+Space로 한글)";
+  }
+  function setOn(v){ on = v; comp = null; try { localStorage.setItem(KEY, v ? "1" : "0"); } catch(e){} paintBtn(); }
+  btn.addEventListener("click", function(){ setOn(!on); });
+  paintBtn();
+
+  // 바꿔 넣을 칸: 글자 칸 전부. 예약 정보 붙여넣기 칸은 원문 그대로 두므로 제외
+  function target(el){
+    if(!el || el.readOnly || el.disabled || el.id === "f-raw") return false;
+    if(el.tagName === "TEXTAREA") return true;
+    return el.tagName === "INPUT" && /^(text|search|)$/.test(el.getAttribute("type") || "");
+  }
+  // 조합 중인 글자: 맨 끝 두 글자까지만 붙잡고 있다 (받침이 다음 글자로 넘어가는 경우 때문)
+  var comp = null;   // { el, start, end, jamo:[] }
+  function put(el, start, end, text){
+    var v = el.value;
+    el.value = v.slice(0, start) + text + v.slice(end);
+    var caret = start + text.length;
+    el.setSelectionRange(caret, caret);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return caret;
+  }
+  document.addEventListener("keydown", function(e){
+    var el = e.target;
+    if(!target(el)) return;
+    if(e.key === " " && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey){ e.preventDefault(); setOn(!on); return; }
+    if(!on || !window.Hangul || e.isComposing || e.key === "Process" || e.ctrlKey || e.altKey || e.metaKey) { if(e.key !== "Shift") comp = null; return; }
+    var live = comp && comp.el === el && el.selectionStart === comp.end && el.selectionEnd === comp.end;
+    if(/^[a-zA-Z]$/.test(e.key)){
+      var j = (e.shiftKey && MAP[e.key.toUpperCase()]) || MAP[e.key.toLowerCase()];
+      e.preventDefault();
+      if(!live) comp = { el: el, start: el.selectionStart, end: el.selectionEnd, jamo: [] };
+      comp.jamo.push(j);
+      var text = Hangul.assemble(comp.jamo);
+      comp.end = put(el, comp.start, comp.end, text);
+      if(text.length > 2){   // 앞 글자들은 확정
+        var n = text.length - 2;
+        comp.start += n;
+        comp.jamo = Hangul.disassemble(text.slice(n));
+      }
+      return;
+    }
+    if(e.key === "Backspace" && live && comp.jamo.length){
+      e.preventDefault();
+      comp.jamo.pop();
+      comp.end = put(el, comp.start, comp.end, Hangul.assemble(comp.jamo));
+      if(!comp.jamo.length) comp = null;
+      return;
+    }
+    if(e.key !== "Shift") comp = null;   // 띄어쓰기 · 숫자 · 방향키 등에서 조합 끝
+  });
+  document.addEventListener("mousedown", function(){ comp = null; });
+  document.addEventListener("focusin", function(){ comp = null; });
 })();
 </script>
 
