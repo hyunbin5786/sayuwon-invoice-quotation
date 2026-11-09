@@ -441,7 +441,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <h2>출력</h2>
         <div class="body">
           <button class="btn primary block" type="button" id="out-real">출력</button>
-          <button class="btn block" type="button" id="open-mail">메일 문구</button>          <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
+          <button class="btn block" type="button" id="open-mail" hidden>메일 문구 다시 보기</button>          <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
           <div class="status" id="status" aria-live="polite"></div>
         </div>
       </section>
@@ -1602,6 +1602,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       await browserDownloads.save({ filename: xlsxName, data: new Blob([buf]) });
       status("저장했습니다 · " + variants.map(function(v){ return v.name; }).concat([xlsxName]).join(" · "), "ok");
       recordIssue(variants.map(function(v){ return v.name; }).concat([xlsxName]));   // 발급 내역에 남김
+      setMailReady(true);
       openMail();   // 이어서 메일 문구
     } catch(err){
       var code = err && err.code;
@@ -1957,6 +1958,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     defaultState();
     editMode = "edit";
     setIssueMeta(null);   // 새 예약으로 시작하면 수정발행 아님
+    setMailReady(false);
     closeStart();
     document.getElementById("f-raw").value = keepRaw;
     var warns = [], rows = [];
@@ -2240,6 +2242,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function startBlank(){
     defaultState();
     editMode = "create";
+    setMailReady(false);
     setIssueMeta(null);
     closeStart();
     document.getElementById("parseinfo").innerHTML = "";
@@ -2288,6 +2291,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function openMail(){ mailDoc = null; mailFill(); elMail.hidden = false; paintSteps(); document.getElementById("mail-subject").focus(); }
   function closeMail(){ elMail.hidden = true; paintSteps(); }
   document.getElementById("open-mail").addEventListener("click", openMail);
+  // 메일 문구 버튼은 출력한 뒤에만 (닫은 메일 창을 다시 열 때). 새 문서를 시작하면 다시 숨김
+  function setMailReady(v){ document.getElementById("open-mail").hidden = !v; }
   document.getElementById("mail-close").addEventListener("click", closeMail);
   elMail.addEventListener("click", function(e){ if(e.target === elMail) closeMail(); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elMail.hidden) closeMail(); });
@@ -2473,6 +2478,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     state.rows = state.rows || []; state.swaps = state.swaps || {};
     state.rows.forEach(function(r){ if(Number(r.key) >= uid) uid = Number(r.key) + 1; });
     editMode = "edit";
+    setMailReady(false);
     document.getElementById("parseinfo").innerHTML = "";
     closeStart(); closeHistory(); closeMail();
     paint(); status("");
