@@ -405,9 +405,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <section class="panel actions">
         <h2>출력</h2>
         <div class="body">
-          <button class="btn primary block" type="button" id="out-real">출력</button>
-          <button class="btn primary block" type="button" id="out-fake" hidden>외부용 출력</button>
-          <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
+          <button class="btn primary block" type="button" id="out-real">출력</button>          <button class="btn" type="button" id="reset" style="align-self:flex-start">새로 작성</button>
           <div class="status" id="status" aria-live="polite"></div>
         </div>
       </section>
@@ -1391,14 +1389,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     w.innerHTML = msgs.map(function(m){ return '<div class="warn">' + esc(m) + '</div>'; }).join("");
   }
 
-  // 내부용만: "출력" 하나 / 내부용 + 외부용: "내부용 ○○ 출력" + "외부용 ○○ 출력"
+  // 출력 버튼은 하나. 내부용 + 외부용이면 내부용 PDF · 외부용 PDF · 엑셀을 한 번에
   function updateButtons(){
-    var none = activeForms().length === 0, fake = state.docUse === "fake";
-    var real = document.getElementById("out-real"), ext = document.getElementById("out-fake");
-    real.textContent = fake ? "내부용 " + docName() + " 출력" : "출력";
-    ext.textContent = "외부용 " + docName() + " 출력";
-    ext.hidden = !fake;
-    real.disabled = ext.disabled = none;
+    var real = document.getElementById("out-real");
+    real.textContent = "출력";
+    real.disabled = activeForms().length === 0;
   }
 
   // ---------- PDF ----------
@@ -1438,23 +1433,26 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var d = (issueDate() || todayISO()).replace(/-/g, "");
     return "사유원_" + docName() + "_" + who + "_" + d + (tag ? "_" + tag : "") + ".pdf";
   }
-  // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF 한 개 + 엑셀 한 개를 함께 저장
-  // kind = "real"(내부용) | "fake"(외부용). 엑셀은 어느 버튼이든 같은 파일:
-  // 내부용만이면 시트 하나, 외부용을 함께 만들면 시트1 내부용 · 시트2 외부용
+  // 출력: 사유원 · 신라철강 양식을 모두 담은 PDF + 엑셀 한 개를 함께 저장
+  // 내부용만이면 PDF 하나 · 엑셀(시트 하나)
+  // 내부용 + 외부용이면 내부용 PDF · 외부용 PDF · 엑셀(시트1 내부용 · 시트2 외부용)
   var busy = false;
-  async function makeOutput(kind){
+  async function makeOutput(){
     if(busy) return;
-    var bad = validate(kind);
+    var fake = state.docUse === "fake";
+    var bad = validate(fake ? "fake" : "real");
     if(bad){ status(bad, "err"); return; }
     if(!window.html2canvas || !window.jspdf){ status("PDF 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err"); return; }
 
-    var rows = kind === "fake" ? fakeRows() : state.rows;
-    var tag = state.docUse === "fake" ? (kind === "fake" ? "외부용" : "내부용") : "";
-    var sheets = withRows(rows, function(){
-      return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
+    var variants = fake ? [{ rows: state.rows, tag: "내부용" }, { rows: fakeRows(), tag: "외부용" }] : [{ rows: state.rows, tag: "" }];
+    variants.forEach(function(v){
+      v.sheets = withRows(v.rows, function(){
+        return activeForms().map(function(f){ return { form:f, html: sheetHTML(f) }; });
+      });
+      v.name = fileName(v.tag);
     });
-    if(!sheets.length) return;
-    var pdfName = fileName(tag), xlsxName = fileName("").replace(/\.pdf$/, ".xlsx");
+    if(!variants[0].sheets.length) return;
+    var xlsxName = fileName("").replace(/\.pdf$/, ".xlsx");
 
     busy = true;
     status("파일을 만드는 중입니다…");
@@ -1465,17 +1463,21 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       // PDF
       host.style.cssText = "position:fixed;left:-20000px;top:0;width:794px;background:#fff;z-index:-1;";
       document.body.appendChild(host);
-      var pdf = new window.jspdf.jsPDF({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
-      for(var i=0;i<sheets.length;i++){
-        host.innerHTML = sheets[i].html;
-        var el = host.firstElementChild;
-        el.style.boxShadow = "none";
-        var canvas = await html2canvas(el, {
-          scale: 3, backgroundColor: "#ffffff", logging: false,
-          width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
-        });
-        if(i > 0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+      for(var vi=0; vi<variants.length; vi++){
+        var sheets = variants[vi].sheets;
+        var pdf = new window.jspdf.jsPDF({ unit:"mm", format:"a4", orientation:"portrait", compress:true });
+        for(var i=0;i<sheets.length;i++){
+          host.innerHTML = sheets[i].html;
+          var el = host.firstElementChild;
+          el.style.boxShadow = "none";
+          var canvas = await html2canvas(el, {
+            scale: 3, backgroundColor: "#ffffff", logging: false,
+            width: 794, height: 1123, windowWidth: 794, windowHeight: 1123
+          });
+          if(i > 0) pdf.addPage();
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+        }
+        variants[vi].blob = pdf.output("blob");
       }
 
       // 엑셀
@@ -1491,9 +1493,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       }
       var buf = await wb.xlsx.writeBuffer();
 
-      await browserDownloads.save({ filename: pdfName, data: pdf.output("blob") });
+      for(var si=0; si<variants.length; si++) await browserDownloads.save({ filename: variants[si].name, data: variants[si].blob });
       await browserDownloads.save({ filename: xlsxName, data: new Blob([buf]) });
-      status("저장했습니다 · " + pdfName + " · " + xlsxName, "ok");
+      status("저장했습니다 · " + variants.map(function(v){ return v.name; }).concat([xlsxName]).join(" · "), "ok");
     } catch(err){
       var code = err && err.code;
       if(code === "lib") status("엑셀 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err");
@@ -2094,8 +2096,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("reset").addEventListener("click", function(){
     defaultState(); paint(); status("");
   });
-  document.getElementById("out-real").addEventListener("click", function(){ makeOutput("real"); });
-  document.getElementById("out-fake").addEventListener("click", function(){ makeOutput("fake"); });
+  document.getElementById("out-real").addEventListener("click", function(){ makeOutput(); });
 
   paint();
 })();
