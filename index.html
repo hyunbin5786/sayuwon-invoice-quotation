@@ -207,6 +207,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
+.histtable{min-width:900px}
+.histtable td{padding:7px 6px; font-variant-numeric:tabular-nums}
+.histtable td.num{text-align:right}
+.histtable .kind{display:inline-block; padding:1px 7px; border-radius:999px; font-size:11.5px; border:1px solid var(--line-strong); color:var(--muted)}
+.histtable .kind.revise{border-color:var(--accent); color:var(--accent)}
+.histtable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
+.histtable .acts{display:flex; gap:6px; justify-content:flex-end}
+.histtable tr.pending td{background:var(--surface-2)}
+.issuebar{display:none; margin-bottom:16px; padding:10px 14px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); font-size:13px}
+.issuebar.on{display:flex; align-items:center; justify-content:space-between; gap:10px}
 .steps{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-6px 0 16px}
 .step{display:inline-flex; align-items:center; gap:7px; padding:6px 12px 6px 6px; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--muted); font:inherit; font-size:13px; cursor:pointer}
 .step b{display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--surface-2); font-size:12px}
@@ -288,6 +298,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <span class="chip green">수목원 관람 · 면세 · 5%/10% 자동</span>
       <span class="chip steel">식음업장 · VAT 10% · 사담 다이닝만 할인</span>
       <button class="btn kobtn" type="button" id="ko-toggle" aria-pressed="true">한</button>
+      <button class="btn" type="button" id="open-history">발급 내역</button>
       <button class="btn" type="button" id="open-catalog">품목 관리</button>
     </div>
   </header>
@@ -304,6 +315,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   <div class="app">
     <!-- ================= EDITOR ================= -->
     <div>
+      <div class="issuebar" id="issuebar"><span id="issuebar-text"></span><button class="btn small" type="button" id="issuebar-cancel">수정발행 취소</button></div>
       <div id="parseinfo"></div>
 
       <section class="panel">
@@ -459,6 +471,27 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         <p>예약 정보 없이 빈 문서에서 시작합니다. 기본 정보와 품목을 하나씩 입력합니다.</p>
         <button class="btn block" type="button" id="start-blank" style="margin-top:auto">직접 생성하기</button>
       </section>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="history-modal" hidden>
+  <div class="modalbox" role="dialog" aria-modal="true" aria-labelledby="hist-title">
+    <div class="modalhead">
+      <h2 id="hist-title">발급 내역 <span id="hist-count" class="catcount"></span></h2>
+      <input id="hist-search" type="search" placeholder="수신 · 담당 · 문서 검색">
+      <button class="btn" type="button" id="hist-refresh">새로고침</button>
+      <button class="iconbtn" type="button" id="hist-close" aria-label="닫기">✕</button>
+    </div>
+    <p class="cathint"><b>재발행</b>: 그때 내용 그대로 파일을 다시 만듭니다. <b>수정발행</b>: 그때 내용을 불러와 고친 뒤 출력합니다 (원본과 연결되어 남음). <span id="hist-status"></span></p>
+    <div class="catscroll">
+      <table class="cattable histtable">
+        <thead><tr>
+          <th style="width:118px">발급 일시</th><th style="width:96px">구분</th><th style="width:118px">문서</th><th>수신</th>
+          <th style="width:104px">이용일</th><th style="width:110px;text-align:right">합계</th><th style="width:96px">담당</th><th style="width:150px"></th>
+        </tr></thead>
+        <tbody id="hist-body"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1565,6 +1598,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       for(var si=0; si<variants.length; si++) await browserDownloads.save({ filename: variants[si].name, data: variants[si].blob });
       await browserDownloads.save({ filename: xlsxName, data: new Blob([buf]) });
       status("저장했습니다 · " + variants.map(function(v){ return v.name; }).concat([xlsxName]).join(" · "), "ok");
+      recordIssue(variants.map(function(v){ return v.name; }).concat([xlsxName]));   // 발급 내역에 남김
       openMail();   // 이어서 메일 문구
     } catch(err){
       var code = err && err.code;
@@ -1898,6 +1932,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var keepRaw = document.getElementById("f-raw").value;
     defaultState();
     editMode = "edit";
+    setIssueMeta(null);   // 새 예약으로 시작하면 수정발행 아님
     closeStart();
     document.getElementById("f-raw").value = keepRaw;
     var warns = [], rows = [];
@@ -2181,6 +2216,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function startBlank(){
     defaultState();
     editMode = "create";
+    setIssueMeta(null);
     closeStart();
     document.getElementById("parseinfo").innerHTML = "";
     paint(); status("");
@@ -2244,6 +2280,146 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       navigator.clipboard.writeText(el.value).then(done, function(){ el.select(); document.execCommand("copy"); done(); });
     } else { el.select(); document.execCommand("copy"); done(); }
   });
+
+  // ---------- 발급 내역 ----------
+  // 출력할 때마다 한 줄씩 남긴다(그때 문서 내용 전체 포함). 공유 저장소(구글 시트 'history')에 올리고,
+  // 올리기 전 · 저장소가 아직 이 기능을 모르면 이 브라우저에 보관했다가 다음에 다시 올린다.
+  // 재발행 = 그때 내용 그대로 다시 출력 / 수정발행 = 그때 내용을 불러와 고친 뒤 출력 (원본과 연결)
+  var HIST_PENDING = "sy_history_pending", HIST_CACHE = "sy_history_cache";
+  function readArr(k){ try { var v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
+  function writeArr(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  var histList = readArr(HIST_CACHE), histPending = readArr(HIST_PENDING), histServer = null, histBusy = false;
+  var issueMeta = null;   // { kind:"reissue"|"revise", parent:id, label }
+  var elHist = document.getElementById("history-modal");
+
+  function setIssueMeta(m){
+    issueMeta = m;
+    var bar = document.getElementById("issuebar");
+    bar.classList.toggle("on", !!(m && m.kind === "revise"));
+    if(m && m.kind === "revise") document.getElementById("issuebar-text").textContent = "수정발행 중 · 원본: " + m.label + " → 고친 뒤 출력하면 수정발행으로 남습니다";
+  }
+  document.getElementById("issuebar-cancel").addEventListener("click", function(){ setIssueMeta(null); });
+
+  function histId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function fmtAt(iso){
+    var d = new Date(iso); if(isNaN(d.getTime())) return String(iso || "");
+    function p(n){ return ("0" + n).slice(-2); }
+    return d.getFullYear() + "." + p(d.getMonth()+1) + "." + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function histLabel(h){ return fmtAt(h.at) + " " + (h.client || "") + " " + (h.doc || ""); }
+
+  function recordIssue(files){
+    var h = { id: histId(), at: new Date().toISOString(),
+      kind: issueMeta ? issueMeta.kind : "new", parent: issueMeta ? issueMeta.parent : "",
+      doc: docName(), client: state.client.trim(), useDate: state.useDate, issueDate: issueDate(),
+      total: totalOf("sayuwon") + totalOf("shilla"), sender: state.sender, use: state.docUse,
+      files: files, snapshot: JSON.parse(JSON.stringify(state)) };
+    histPending.push(h); writeArr(HIST_PENDING, histPending);
+    if(issueMeta && issueMeta.kind === "revise") setIssueMeta({ kind:"revise", parent: h.id, label: histLabel(h) });   // 또 고쳐 출력하면 이번 것의 수정발행
+    else setIssueMeta(null);
+    flushHistory();
+  }
+  function flushHistory(){
+    if(!SHARED_URL || histBusy || !histPending.length) return Promise.resolve();
+    histBusy = true;
+    var sending = histPending.slice();
+    return fetch(SHARED_URL, { method:"POST", body: JSON.stringify({ history: sending }) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        histBusy = false;
+        if(res && res.ok && res.saved != null){   // 새 Apps Script: 저장됨
+          histServer = true;
+          var sent = {}; sending.forEach(function(h){ sent[h.id] = true; });
+          histPending = histPending.filter(function(h){ return !sent[h.id]; });
+          writeArr(HIST_PENDING, histPending);
+          histList = sending.slice().reverse().concat(histList.filter(function(h){ return !sent[h.id]; }));
+          writeArr(HIST_CACHE, histList.slice(0, 300));
+        } else histServer = false;   // 예전 Apps Script: 이 브라우저에 보관
+        if(!elHist.hidden) renderHistory();
+      })
+      .catch(function(){ histBusy = false; if(!elHist.hidden) renderHistory(); });
+  }
+  function loadHistory(){
+    if(!SHARED_URL) return Promise.resolve();
+    return fetch(SHARED_URL + "?history=1&limit=500").then(function(r){ return r.json(); })
+      .then(function(res){
+        if(res && Array.isArray(res.history)){ histServer = true; histList = res.history; writeArr(HIST_CACHE, histList.slice(0, 300)); }
+        else histServer = false;
+        if(!elHist.hidden) renderHistory();
+      }).catch(function(){});
+  }
+  function allHistory(){
+    var have = {}; histList.forEach(function(h){ have[h.id] = true; });
+    var mine = histPending.filter(function(h){ return !have[h.id]; }).map(function(h){ return Object.assign({ pending:true }, h); }).reverse();
+    return mine.concat(histList);
+  }
+  var KIND_NAME = { "new":"신규", reissue:"재발행", revise:"수정발행" };
+  function renderHistory(){
+    var all = allHistory(), q = document.getElementById("hist-search").value.trim().toLowerCase();
+    var byId = {}; all.forEach(function(h){ byId[h.id] = h; });
+    var list = q ? all.filter(function(h){ return [h.client, h.sender, h.doc, fmtAt(h.at)].join(" ").toLowerCase().indexOf(q) >= 0; }) : all;
+    document.getElementById("hist-count").textContent = "· " + all.length + "건";
+    var st = !SHARED_URL ? "이 브라우저에만 저장됩니다."
+      : histServer === false ? "⚠ 공유 저장소(Apps Script)를 업데이트해야 다른 사람과 공유됩니다. 지금은 이 브라우저에 보관 중입니다."
+      : histServer ? "공유 내역입니다. 누가 발급해도 모두에게 보입니다." : "불러오는 중…";
+    document.getElementById("hist-status").textContent = st;
+    document.getElementById("hist-body").innerHTML = list.length ? list.map(function(h){
+      var par = h.parent && byId[h.parent];
+      var kind = KIND_NAME[h.kind] || "신규";
+      var useTxt = h.use === "fake" ? '<span class="sub">내부용 + 외부용</span>' : "";
+      return '<tr data-id="' + esc(h.id) + '"' + (h.pending ? ' class="pending"' : '') + '>' +
+        '<td>' + esc(fmtAt(h.at)) + (h.pending ? '<span class="sub">' + (histServer === false ? '이 브라우저에 보관' : '저장 중') + '</span>' : '') + '</td>' +
+        '<td><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
+          (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') + '</td>' +
+        '<td>' + esc(h.doc || "") + useTxt + '</td>' +
+        '<td>' + esc(h.client || "") + '</td>' +
+        '<td>' + esc(fmtDate(String(h.useDate || "").slice(0, 10), true)) + '</td>' +
+        '<td class="num">' + won(h.total) + '원</td>' +
+        '<td>' + esc(h.sender || "") + '</td>' +
+        '<td><div class="acts">' + (h.snapshot ? '<button class="btn small" type="button" data-h="reissue">재발행</button><button class="btn small" type="button" data-h="revise">수정발행</button>' : '') + '</div></td>' +
+      '</tr>';
+    }).join("") : '<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">' + (q ? "찾는 내역이 없습니다." : "아직 발급 내역이 없습니다. 출력하면 여기에 남습니다.") + '</td></tr>';
+  }
+  function openHistory(){
+    document.getElementById("hist-search").value = "";
+    renderHistory(); elHist.hidden = false;
+    flushHistory().then(loadHistory);
+  }
+  function closeHistory(){ elHist.hidden = true; }
+  // 그때 문서 내용으로 되돌린다
+  function restoreIssue(h){
+    var s = JSON.parse(JSON.stringify(h.snapshot));
+    defaultState();
+    Object.keys(s).forEach(function(k){ state[k] = s[k]; });
+    state.rows = state.rows || []; state.swaps = state.swaps || {};
+    state.rows.forEach(function(r){ if(Number(r.key) >= uid) uid = Number(r.key) + 1; });
+    editMode = "edit";
+    document.getElementById("parseinfo").innerHTML = "";
+    closeStart(); closeHistory(); closeMail();
+    paint(); status("");
+    setEditOpen(false);
+  }
+  document.getElementById("hist-body").addEventListener("click", function(e){
+    var b = e.target.closest("[data-h]"); if(!b) return;
+    var id = b.closest("tr").getAttribute("data-id");
+    var h = allHistory().filter(function(x){ return x.id === id; })[0]; if(!h || !h.snapshot) return;
+    if(hasWork() && !confirm("지금 작성 중인 내용 대신 이 내역을 불러올까요?")) return;
+    restoreIssue(h);
+    if(b.getAttribute("data-h") === "reissue"){
+      setIssueMeta({ kind:"reissue", parent: h.id, label: histLabel(h) });
+      makeOutput();   // 그대로 다시 출력
+    } else {
+      setIssueMeta({ kind:"revise", parent: h.id, label: histLabel(h) });
+      setEditOpen(true);
+    }
+  });
+  document.getElementById("open-history").addEventListener("click", openHistory);
+  document.getElementById("hist-close").addEventListener("click", closeHistory);
+  document.getElementById("hist-refresh").addEventListener("click", function(){ flushHistory().then(loadHistory); });
+  document.getElementById("hist-search").addEventListener("input", renderHistory);
+  elHist.addEventListener("click", function(e){ if(e.target === elHist) closeHistory(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elHist.hidden) closeHistory(); });
+  flushHistory();   // 지난번에 못 올린 내역
 
   paint();
   openStart();   // 처음 열면 1단계: 붙여넣기 / 직접 생성 고르기
