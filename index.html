@@ -2288,8 +2288,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function mailFill(){
     var who = state.client.trim() || "수신";
     var doc = mailDoc || docName();
-    document.getElementById("mail-subject").value = "[사유원] " + who + " " + doc + " 송부드립니다.";
-    document.getElementById("mail-text").value = "안녕하세요, 사유원입니다.\n\n" + who + " " + doc + " 송부드립니다.\n\n감사합니다.";
+    document.getElementById("mail-subject").value = "[사유원] " + who + "님 " + doc + " 송부드립니다.";
+    document.getElementById("mail-text").value = "안녕하세요, 사유원입니다.\n\n" + who + "님 " + doc + " 송부드립니다.\n\n감사합니다.";
     var bs = document.querySelectorAll("#mail-doc button");
     for(var i=0;i<bs.length;i++) bs[i].classList.toggle("on", bs[i].getAttribute("data-v") === doc);
     document.getElementById("mail-status").textContent = "";
