@@ -18,19 +18,22 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.history) {
     return json_({ ok: true, history: readHistory_(Number(e.parameter.limit) || 500) });
   }
-  return json_({ ok: true, data: read_(), historyApi: 1 });
+  return json_({ ok: true, data: read_(), historyApi: 2 });
 }
 
 // 바꾼 내용을 작업 단위로 받아 지금 저장된 목록에 합친다 (여러 사람이 동시에 고쳐도 서로 지우지 않게)
 // history: [발급 내역] 이 오면 'history' 시트에 한 줄씩 더한다
+// cancel: [{id, canceled, cancelNote}] 발급 취소 표시 (canceled 가 비어 있으면 취소 철회). 줄은 지우지 않는다
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     var req = JSON.parse(e.postData.contents || "{}");
-    if (req.history && req.history.length) {
-      addHistory_(req.history);
-      if (!req.ops || !req.ops.length) return json_({ ok: true, saved: req.history.length });
+    var out = { ok: true };
+    if (req.history && req.history.length) { addHistory_(req.history); out.saved = req.history.length; }
+    if (req.cancel && req.cancel.length) out.canceled = cancelHistory_(req.cancel);
+    if (out.saved != null || out.canceled != null) {
+      if (!req.ops || !req.ops.length) return json_(out);
     }
     var d = read_();
     (req.ops || []).forEach(function (o) { d = apply_(d, o); });
@@ -95,7 +98,7 @@ function write_(d) {
   s.getRange("B1").setValue(new Date());
 }
 // ---------- 발급 내역 ('history' 시트, 한 줄 = 한 번 발급) ----------
-var HIST_COLS = ["id", "at", "kind", "parent", "doc", "client", "useDate", "issueDate", "total", "sender", "use", "files", "snapshot"];
+var HIST_COLS = ["id", "at", "kind", "parent", "doc", "client", "useDate", "issueDate", "total", "sender", "use", "files", "snapshot", "canceled", "cancelNote"];
 function histSheet_() {
   var ss = sheet_().getParent();
   var s = ss.getSheetByName("history");
@@ -104,8 +107,27 @@ function histSheet_() {
     s.getRange(1, 1, s.getMaxRows(), HIST_COLS.length).setNumberFormat("@");   // 날짜가 시간대 바뀐 날짜값으로 바뀌지 않게 모두 글자로
     s.appendRow(HIST_COLS);
     s.setFrozenRows(1);
+  } else if (s.getRange(1, HIST_COLS.length).getValue() !== HIST_COLS[HIST_COLS.length - 1]) {
+    // 예전에 만든 시트: 새 칸(발급 취소) 머리글만 채운다
+    s.getRange(1, 1, 1, HIST_COLS.length).setValues([HIST_COLS]);
+    s.getRange(1, 1, s.getMaxRows(), HIST_COLS.length).setNumberFormat("@");
   }
   return s;
+}
+// 발급 취소 / 취소 철회: 그 줄의 canceled · cancelNote 칸만 바꾼다
+function cancelHistory_(list) {
+  var s = histSheet_();
+  var n = s.getLastRow();
+  if (n < 2) return 0;
+  var ids = s.getRange(2, 1, n - 1, 1).getValues().map(function (r) { return String(r[0]); });
+  var col = HIST_COLS.indexOf("canceled") + 1, done = 0;
+  list.forEach(function (c) {
+    var i = ids.indexOf(String(c && c.id));
+    if (i < 0) return;
+    s.getRange(i + 2, col, 1, 2).setValues([[c.canceled || "", c.cancelNote || ""]]);
+    done++;
+  });
+  return done;
 }
 function addHistory_(items) {
   var s = histSheet_();

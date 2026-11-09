@@ -207,7 +207,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
-.histtable{min-width:900px}
+.histtable{min-width:1000px}
 .histtable td{padding:7px 6px; font-variant-numeric:tabular-nums}
 .histtable td.num{text-align:right}
 .histtable .kind{display:inline-block; padding:1px 7px; border-radius:999px; font-size:11.5px; border:1px solid var(--line-strong); color:var(--muted)}
@@ -215,6 +215,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .histtable .acts{display:flex; gap:6px; justify-content:flex-end}
 .histtable tr.pending td{background:var(--surface-2)}
+.histtable tr.canceled td{color:var(--faint)}
+.histtable tr.canceled td:nth-child(n+3):nth-child(-n+7){text-decoration:line-through}
+.histtable .kind.void{border-color:var(--danger); color:var(--danger); margin-left:4px}
 .issuebar{display:none; margin-bottom:16px; padding:10px 14px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); font-size:13px}
 .issuebar.on{display:flex; align-items:center; justify-content:space-between; gap:10px}
 .steps{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-6px 0 16px}
@@ -488,7 +491,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <table class="cattable histtable">
         <thead><tr>
           <th style="width:118px">발급 일시</th><th style="width:96px">구분</th><th style="width:118px">문서</th><th>수신</th>
-          <th style="width:104px">이용일</th><th style="width:110px;text-align:right">합계</th><th style="width:96px">담당</th><th style="width:150px"></th>
+          <th style="width:104px">이용일</th><th style="width:110px;text-align:right">합계</th><th style="width:96px">담당</th><th style="width:236px"></th>
         </tr></thead>
         <tbody id="hist-body"></tbody>
       </table>
@@ -2319,22 +2322,44 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     else setIssueMeta(null);
     flushHistory();
   }
+  // 발급 취소 / 취소 철회는 서버에 올리기 전까지 이 브라우저에 모아 둔다: [{id, canceled, cancelNote}]
+  var HIST_CANCEL = "sy_history_cancel";
+  var histCancel = readArr(HIST_CANCEL), cancelServer = null;
+  function applyCancels(list){
+    if(!histCancel.length) return list;
+    var m = {}; histCancel.forEach(function(c){ m[c.id] = c; });
+    return list.map(function(h){ return m[h.id] ? Object.assign({}, h, { canceled: m[h.id].canceled, cancelNote: m[h.id].cancelNote }) : h; });
+  }
   function flushHistory(){
-    if(!SHARED_URL || histBusy || !histPending.length) return Promise.resolve();
+    if(!SHARED_URL || histBusy || (!histPending.length && !histCancel.length)) return Promise.resolve();
     histBusy = true;
-    var sending = histPending.slice();
-    return fetch(SHARED_URL, { method:"POST", body: JSON.stringify({ history: sending }) })
+    var sending = histPending.slice(), cancels = histCancel.slice();
+    var body = {};
+    if(sending.length) body.history = sending;
+    if(cancels.length) body.cancel = cancels;
+    return fetch(SHARED_URL, { method:"POST", body: JSON.stringify(body) })
       .then(function(r){ return r.json(); })
       .then(function(res){
         histBusy = false;
-        if(res && res.ok && res.saved != null){   // 새 Apps Script: 저장됨
-          histServer = true;
-          var sent = {}; sending.forEach(function(h){ sent[h.id] = true; });
-          histPending = histPending.filter(function(h){ return !sent[h.id]; });
-          writeArr(HIST_PENDING, histPending);
-          histList = sending.slice().reverse().concat(histList.filter(function(h){ return !sent[h.id]; }));
-          writeArr(HIST_CACHE, histList.slice(0, 300));
-        } else histServer = false;   // 예전 Apps Script: 이 브라우저에 보관
+        if(sending.length){
+          if(res && res.ok && res.saved != null){   // 새 Apps Script: 저장됨
+            histServer = true;
+            var sent = {}; sending.forEach(function(h){ sent[h.id] = true; });
+            histPending = histPending.filter(function(h){ return !sent[h.id]; });
+            writeArr(HIST_PENDING, histPending);
+            histList = sending.slice().reverse().concat(histList.filter(function(h){ return !sent[h.id]; }));
+          } else histServer = false;   // 예전 Apps Script: 이 브라우저에 보관
+        }
+        if(cancels.length){
+          if(res && res.ok && res.canceled != null){
+            cancelServer = true;
+            var done = {}; cancels.forEach(function(c){ done[c.id] = c; });
+            histList = histList.map(function(h){ return done[h.id] ? Object.assign({}, h, { canceled: done[h.id].canceled, cancelNote: done[h.id].cancelNote }) : h; });
+            histCancel = histCancel.filter(function(c){ return !done[c.id] || done[c.id] !== c; });
+            writeArr(HIST_CANCEL, histCancel);
+          } else cancelServer = false;   // 발급 취소를 모르는 예전 Apps Script
+        }
+        writeArr(HIST_CACHE, histList.slice(0, 300));
         if(!elHist.hidden) renderHistory();
       })
       .catch(function(){ histBusy = false; if(!elHist.hidden) renderHistory(); });
@@ -2351,7 +2376,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function allHistory(){
     var have = {}; histList.forEach(function(h){ have[h.id] = true; });
     var mine = histPending.filter(function(h){ return !have[h.id]; }).map(function(h){ return Object.assign({ pending:true }, h); }).reverse();
-    return mine.concat(histList);
+    return applyCancels(mine.concat(histList));
   }
   var KIND_NAME = { "new":"신규", reissue:"재발행", revise:"수정발행" };
   function renderHistory(){
@@ -2362,21 +2387,27 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var st = !SHARED_URL ? "이 브라우저에만 저장됩니다."
       : histServer === false ? "⚠ 공유 저장소(Apps Script)를 업데이트해야 다른 사람과 공유됩니다. 지금은 이 브라우저에 보관 중입니다."
       : histServer ? "공유 내역입니다. 누가 발급해도 모두에게 보입니다." : "불러오는 중…";
+    if(cancelServer === false && histCancel.length) st += " ⚠ 발급 취소를 다른 사람과 공유하려면 Apps Script를 새 버전으로 다시 배포해야 합니다 (지금은 이 브라우저에만 표시).";
     document.getElementById("hist-status").textContent = st;
     document.getElementById("hist-body").innerHTML = list.length ? list.map(function(h){
       var par = h.parent && byId[h.parent];
       var kind = KIND_NAME[h.kind] || "신규";
       var useTxt = h.use === "fake" ? '<span class="sub">내부용 + 외부용</span>' : "";
-      return '<tr data-id="' + esc(h.id) + '"' + (h.pending ? ' class="pending"' : '') + '>' +
+      var off = !!h.canceled;
+      return '<tr data-id="' + esc(h.id) + '"' + (off ? ' class="canceled"' : h.pending ? ' class="pending"' : '') + '>' +
         '<td>' + esc(fmtAt(h.at)) + (h.pending ? '<span class="sub">' + (histServer === false ? '이 브라우저에 보관' : '저장 중') + '</span>' : '') + '</td>' +
         '<td><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
-          (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') + '</td>' +
+          (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') +
+          (off ? '<span class="kind void">발급 취소</span><span class="sub">' + esc(fmtAt(h.canceled)) + (h.cancelNote ? ' · ' + esc(h.cancelNote) : '') + '</span>' : '') + '</td>' +
         '<td>' + esc(h.doc || "") + useTxt + '</td>' +
         '<td>' + esc(h.client || "") + '</td>' +
         '<td>' + esc(fmtDate(String(h.useDate || "").slice(0, 10), true)) + '</td>' +
         '<td class="num">' + won(h.total) + '원</td>' +
         '<td>' + esc(h.sender || "") + '</td>' +
-        '<td><div class="acts">' + (h.snapshot ? '<button class="btn small" type="button" data-h="reissue">재발행</button><button class="btn small" type="button" data-h="revise">수정발행</button>' : '') + '</div></td>' +
+        '<td><div class="acts">' + (off
+          ? '<button class="btn small" type="button" data-h="uncancel">취소 철회</button>'
+          : (h.snapshot ? '<button class="btn small" type="button" data-h="reissue">재발행</button><button class="btn small" type="button" data-h="revise">수정발행</button>' : '') +
+            '<button class="btn small danger" type="button" data-h="cancel">발급 취소</button>') + '</div></td>' +
       '</tr>';
     }).join("") : '<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">' + (q ? "찾는 내역이 없습니다." : "아직 발급 내역이 없습니다. 출력하면 여기에 남습니다.") + '</td></tr>';
   }
@@ -2386,6 +2417,25 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     flushHistory().then(loadHistory);
   }
   function closeHistory(){ elHist.hidden = true; }
+  // 발급 취소: 줄은 지우지 않고 '발급 취소' 표시(일시 · 사유)만 남긴다. 취소 철회로 되돌릴 수 있음
+  function setCanceled(h, on){
+    var note = "";
+    if(on){
+      note = prompt('"' + histLabel(h) + '" 발급을 취소할까요?\n취소 사유를 적어 주세요 (비워도 됩니다).', "");
+      if(note === null) return;
+    } else if(!confirm('"' + histLabel(h) + '" 발급 취소를 철회할까요?')) return;
+    var mark = { id: h.id, canceled: on ? new Date().toISOString() : "", cancelNote: on ? note.trim() : "" };
+    var p = histPending.filter(function(x){ return x.id === h.id; })[0];
+    if(p){   // 아직 올리기 전 내역은 그 줄에 바로 표시해서 함께 올린다
+      p.canceled = mark.canceled; p.cancelNote = mark.cancelNote;
+      writeArr(HIST_PENDING, histPending);
+    } else {
+      histCancel = histCancel.filter(function(c){ return c.id !== h.id; }).concat([mark]);
+      writeArr(HIST_CANCEL, histCancel);
+    }
+    renderHistory();
+    flushHistory();
+  }
   // 그때 문서 내용으로 되돌린다
   function restoreIssue(h){
     var s = JSON.parse(JSON.stringify(h.snapshot));
@@ -2401,8 +2451,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   }
   document.getElementById("hist-body").addEventListener("click", function(e){
     var b = e.target.closest("[data-h]"); if(!b) return;
-    var id = b.closest("tr").getAttribute("data-id");
-    var h = allHistory().filter(function(x){ return x.id === id; })[0]; if(!h || !h.snapshot) return;
+    var id = b.closest("tr").getAttribute("data-id"), act = b.getAttribute("data-h");
+    var h = allHistory().filter(function(x){ return x.id === id; })[0]; if(!h) return;
+    if(act === "cancel" || act === "uncancel"){ setCanceled(h, act === "cancel"); return; }
+    if(!h.snapshot) return;
     if(hasWork() && !confirm("지금 작성 중인 내용 대신 이 내역을 불러올까요?")) return;
     restoreIssue(h);
     if(b.getAttribute("data-h") === "reissue"){
