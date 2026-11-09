@@ -18,7 +18,7 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.history) {
     return json_({ ok: true, history: readHistory_(Number(e.parameter.limit) || 500) });
   }
-  return json_({ ok: true, data: read_(), historyApi: 2 });
+  return json_({ ok: true, data: read_(), historyApi: 3 });
 }
 
 // 바꾼 내용을 작업 단위로 받아 지금 저장된 목록에 합친다 (여러 사람이 동시에 고쳐도 서로 지우지 않게)
@@ -138,7 +138,11 @@ function addHistory_(items) {
     if (!h || !h.id || have[h.id]) return;   // 같은 발급을 두 번 보내도 한 줄만
     s.appendRow(HIST_COLS.map(function (k) {
       var v = h[k];
-      return k === "snapshot" || k === "files" ? JSON.stringify(v || null) : (v == null ? "" : v);
+      if (k === "snapshot" || k === "files") return JSON.stringify(v || null);
+      if (v == null) return "";
+      // 날짜 글자(2026-11-09)는 시트가 날짜값으로 바꾸며 시간대가 밀리므로 ' 를 붙여 글자로 둔다
+      if (k === "useDate" || k === "issueDate") return v ? "'" + v : "";
+      return v;
     }));
     have[h.id] = true;
   });
@@ -154,7 +158,12 @@ function readHistory_(limit) {
     HIST_COLS.forEach(function (k, i) {
       var v = r[i];
       if (k === "snapshot" || k === "files") { try { v = JSON.parse(v); } catch (e) { v = null; } }
-      if (v instanceof Date) v = v.toISOString();
+      if (v instanceof Date) {
+            // 예전에 날짜값으로 들어간 이용일 · 발행일은 한국 날짜로 되돌린다
+        v = (k === "useDate" || k === "issueDate")
+          ? Utilities.formatDate(v, "Asia/Seoul", "yyyy-MM-dd")
+          : v.toISOString();
+      }
       o[k] = v;
     });
     return o;
