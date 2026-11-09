@@ -486,6 +486,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     <div class="modalhead">
       <h2 id="hist-title">발급 내역 <span id="hist-count" class="catcount"></span></h2>
       <input id="hist-search" type="search" placeholder="수신 · 담당 · 문서 검색">
+      <button class="btn" type="button" id="hist-excel" title="저장된 발급 내역 전체(500건 넘어도 모두)를 엑셀로 받습니다">엑셀로 받기</button>
       <button class="btn" type="button" id="hist-refresh">새로고침</button>
       <button class="iconbtn" type="button" id="hist-close" aria-label="닫기">✕</button>
     </div>
@@ -2511,6 +2512,85 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   document.getElementById("open-history").addEventListener("click", openHistory);
   document.getElementById("hist-close").addEventListener("click", closeHistory);
   document.getElementById("hist-refresh").addEventListener("click", function(){ flushHistory().then(loadHistory); });
+
+  // 발급 내역 엑셀: 화면(최근 500건)과 달리 저장소에 있는 내역을 전부 받아 한 시트로
+  function histItems(h){
+    var rows = (h.snapshot && h.snapshot.rows) || [];
+    return rows.map(function(r){ return (r.name || "") + " " + (Number(r.qty) || 0) + (Number(r.rate) ? " (" + r.rate + "%)" : ""); }).join(", ");
+  }
+  async function exportHistory(){
+    var btn = document.getElementById("hist-excel"), st = document.getElementById("hist-status");
+    if(btn.disabled) return;
+    btn.disabled = true; var old = btn.textContent; btn.textContent = "만드는 중…";
+    try{
+      await flushHistory();
+      var list = null;
+      if(SHARED_URL){
+        try {
+          var res = await fetch(SHARED_URL + "?history=1&limit=1000000").then(function(r){ return r.json(); });
+          if(res && Array.isArray(res.history)) list = res.history;
+        } catch(e){}
+      }
+      if(!list){ list = histList; st.textContent = "⚠ 공유 저장소에 연결하지 못해 이 화면에 있는 내역만 받습니다."; }
+      // 아직 못 올린 내역 · 취소 표시까지 합친다
+      var have = {}; list.forEach(function(h){ have[h.id] = true; });
+      list = applyCancels(histPending.filter(function(h){ return !have[h.id]; }).slice().reverse().concat(list));
+      var byId = {}; list.forEach(function(h){ byId[h.id] = h; });
+
+      var ExcelJS = await ensureExcel();
+      var wb = new ExcelJS.Workbook();
+      wb.creator = "견적서&거래명세서 발행기"; wb.created = new Date();
+      var ws = wb.addWorksheet("발급 내역", { views: [{ state:"frozen", ySplit:1 }] });
+      ws.columns = [
+        { header:"발급 일시", key:"at", width:17 },
+        { header:"구분", key:"kind", width:9 },
+        { header:"원본 발급 일시", key:"parent", width:17 },
+        { header:"문서", key:"doc", width:11 },
+        { header:"용도", key:"use", width:14 },
+        { header:"수신", key:"client", width:24 },
+        { header:"이용일", key:"useDate", width:12 },
+        { header:"발행일", key:"issueDate", width:12 },
+        { header:"합계", key:"total", width:13 },
+        { header:"담당", key:"sender", width:12 },
+        { header:"상태", key:"state", width:9 },
+        { header:"취소 일시", key:"canceled", width:17 },
+        { header:"취소 사유", key:"cancelNote", width:24 },
+        { header:"품목", key:"items", width:48 },
+        { header:"파일", key:"files", width:48 }
+      ];
+      list.forEach(function(h){
+        var s = h.snapshot || {};
+        var row = ws.addRow({
+          at: fmtAt(h.at), kind: KIND_NAME[h.kind] || "신규",
+          parent: h.parent ? (byId[h.parent] ? fmtAt(byId[h.parent].at) : h.parent) : "",
+          doc: h.doc || "", use: h.use === "fake" ? "내부용 + 외부용" : "내부용",
+          client: h.client || "",
+          useDate: fmtDate(dateOnly(s.useDate || h.useDate), true),
+          issueDate: fmtDate(dateOnly(h.issueDate), true),
+          total: Number(h.total) || 0, sender: h.sender || "",
+          state: h.canceled ? "발급 취소" : "정상",
+          canceled: h.canceled ? fmtAt(h.canceled) : "", cancelNote: h.cancelNote || "",
+          items: histItems(h), files: (h.files || []).join(", ")
+        });
+        row.getCell("total").numFmt = "#,##0";
+        if(h.canceled) row.font = { color:{ argb:"FF999999" }, strike:true };
+      });
+      var head = ws.getRow(1);
+      head.font = { bold:true }; head.alignment = { vertical:"middle", horizontal:"center" }; head.height = 22;
+      head.eachCell(function(c){ c.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFEFEFEF" } }; c.border = { bottom:{ style:"thin" } }; });
+      ws.autoFilter = { from:"A1", to:"O1" };
+      ws.eachRow(function(r, i){ if(i > 1) r.alignment = { vertical:"top", wrapText:true }; });
+
+      var buf = await wb.xlsx.writeBuffer();
+      var d = todayISO().replace(/-/g, "");
+      await browserDownloads.save({ filename: "사유원_발급내역_" + d + ".xlsx", data: new Blob([buf]) });
+      st.textContent = "엑셀로 받았습니다 · 전체 " + list.length + "건";
+    } catch(e){
+      st.textContent = "엑셀을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    btn.disabled = false; btn.textContent = old;
+  }
+  document.getElementById("hist-excel").addEventListener("click", exportHistory);
   document.getElementById("hist-search").addEventListener("input", renderHistory);
   elHist.addEventListener("click", function(e){ if(e.target === elHist) closeHistory(); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elHist.hidden) closeHistory(); });
