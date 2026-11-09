@@ -298,8 +298,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       <span class="sub">예약 정보를 붙여넣거나 직접 입력해 사유원 · 신라철강 견적서와 거래명세서를 만듭니다</span>
     </div>
     <div class="rulechips">
-      <span class="chip green">수목원 관람 · 면세 · 5%/10% 자동</span>
-      <span class="chip steel">식음업장 · VAT 10% · 사담 다이닝만 할인</span>
       <button class="btn kobtn" type="button" id="ko-toggle" aria-pressed="true">한</button>
       <button class="btn" type="button" id="open-history">발급 내역</button>
       <button class="btn" type="button" id="open-catalog">품목 관리</button>
@@ -637,6 +635,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     "평일 관람(09:00~18:00)|50000|1",
     "평일 관람(13:00~18:00)|50000|1",
     "평일(관람)|50000|1",
+    "평일 관람(학생)|45000|1",
+    "주말/공휴일 관람(학생)|62000|1",
     "평일(관람, 몽몽마방 사유의 밥상)|88000|0",
     "평일(관람, 사담 디너)|130000|1",
     "평일(관람, 사담 런치1부)|130000|1",
@@ -658,7 +658,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function classify(src){
     var pkg = src.match(/\(관람,\s*([^)]*)\)/);
     if(pkg) return { kind:"package", form:"shilla", name: pkg[1].replace(/\d부$/, "").trim(), weekend: /주말|공휴일/.test(src) };
-    if(isViewName(src)) return { kind:"view", form:"sayuwon", name: /주말|공휴일/.test(src) ? "주말 관람" : "평일 관람" };
+    if(isViewName(src)) return { kind:"view", form:"sayuwon", name: (/주말|공휴일/.test(src) ? "주말 관람" : "평일 관람") + (/학생/.test(src) ? "(학생)" : "") };
     return { kind: GROUP_TIME[src] ? "gtime" : GROUP_EACH[src] ? "geach" : GOODS[src] ? "goods" : "food", form: /관람권/.test(src) ? "sayuwon" : "shilla", name: src.replace(/\((수정|변경)\)/g, "").trim() };
   }
   // 예약 시스템에서 '굿즈'로 묶인 상품과 판매용 물품
