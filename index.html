@@ -2159,11 +2159,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 })();
 
 // ---------- 한글 자동 입력 ----------
-// 컴퓨터 입력기가 영문 상태여도 글자 칸에서는 두벌식 한글로 바꿔 넣는다.
-// 영어가 필요하면 위쪽 "한/A" 버튼이나 Shift+Space로 끄고 켠다. (입력기가 이미 한글이면 손대지 않음)
+// 글자 칸은 처음에 항상 한글. 컴퓨터 입력기가 영문 상태여도 두벌식 한글로 바꿔 넣는다.
+// 키보드 한/영 키 · Shift+Space · 위쪽 "한/A" 버튼으로 영어와 한글을 오간다.
+// 한/영 키는 컴퓨터 입력기도 함께 바꾸므로, 입력기 상태와 상관없이 이 사이트의 한/A 상태대로 들어가게 맞춘다.
+//  · 한 + 입력기 영문 → 사이트가 한글로 조합 / 한 + 입력기 한글 → 그대로
+//  · A  + 입력기 영문 → 그대로      / A  + 입력기 한글 → 조합된 한글을 누른 자판 글자로 되돌림
 (function(){
-  var KEY = "sy_ko_input";
-  var on = (function(){ try { return localStorage.getItem(KEY) !== "0"; } catch(e){ return true; } })();
+  var on = true;   // 새로 열면 무조건 한글부터
   var MAP = { q:"ㅂ", w:"ㅈ", e:"ㄷ", r:"ㄱ", t:"ㅅ", y:"ㅛ", u:"ㅕ", i:"ㅑ", o:"ㅐ", p:"ㅔ",
               a:"ㅁ", s:"ㄴ", d:"ㅇ", f:"ㄹ", g:"ㅎ", h:"ㅗ", j:"ㅓ", k:"ㅏ", l:"ㅣ",
               z:"ㅋ", x:"ㅌ", c:"ㅊ", v:"ㅍ", b:"ㅠ", n:"ㅜ", m:"ㅡ",
@@ -2173,9 +2175,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     btn.textContent = on ? "한" : "A";
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.title = on ? "한글 입력 중 · 영문 자판으로 쳐도 한글로 바뀝니다 (Shift+Space로 영어)" : "영어 입력 중 (Shift+Space로 한글)";
+    btn.title = on ? "한글 입력 중 · 한/영 키나 Shift+Space로 영어" : "영어 입력 중 · 한/영 키나 Shift+Space로 한글";
   }
-  function setOn(v){ on = v; comp = null; try { localStorage.setItem(KEY, v ? "1" : "0"); } catch(e){} paintBtn(); }
+  function setOn(v){ on = v; comp = null; enQ = []; paintBtn(); }
   btn.addEventListener("click", function(){ setOn(!on); });
   paintBtn();
 
@@ -2185,8 +2187,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     if(el.tagName === "TEXTAREA") return true;
     return el.tagName === "INPUT" && /^(text|search|)$/.test(el.getAttribute("type") || "");
   }
-  // 조합 중인 글자: 맨 끝 두 글자까지만 붙잡고 있다 (받침이 다음 글자로 넘어가는 경우 때문)
-  var comp = null;   // { el, start, end, jamo:[] }
+  function isHanYoung(e){ return e.key === "HangulMode" || e.code === "Lang1" || e.keyCode === 21; }
   function put(el, start, end, text){
     var v = el.value;
     el.value = v.slice(0, start) + text + v.slice(end);
@@ -2195,11 +2196,33 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     el.dispatchEvent(new Event("input", { bubbles: true }));
     return caret;
   }
+
+  // 한글 조합 중인 글자: 맨 끝 두 글자까지만 붙잡고 있다 (받침이 다음 글자로 넘어가는 경우 때문)
+  var comp = null;   // { el, start, end, jamo:[] }
+  // 영어(A)인데 입력기가 한글일 때 누른 자판 글자들
+  var enQ = [], enEl = null, enStart = null;
+
   document.addEventListener("keydown", function(e){
+    if(isHanYoung(e)){ setOn(!on); return; }   // 칸 밖에서 눌러도 바뀐다
     var el = e.target;
     if(!target(el)) return;
     if(e.key === " " && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey){ e.preventDefault(); setOn(!on); return; }
-    if(!on || !window.Hangul || e.isComposing || e.key === "Process" || e.ctrlKey || e.altKey || e.metaKey) { if(e.key !== "Shift") comp = null; return; }
+    if(e.ctrlKey || e.altKey || e.metaKey){ comp = null; return; }
+    var ime = e.isComposing || e.key === "Process" || e.keyCode === 229;
+
+    // A + 입력기 한글: 누른 자판을 기억해 두고, 조합을 바로 끝내 자판 글자로 바꾼다
+    if(!on){
+      if(ime && /^Key[A-Z]$/.test(e.code)){
+        var ch = e.code.slice(3), upper = e.shiftKey !== (e.getModifierState && e.getModifierState("CapsLock"));
+        enQ.push(upper ? ch : ch.toLowerCase());
+        enEl = el;
+        setTimeout(function(){ if(document.activeElement === el){ el.blur(); el.focus(); } }, 0);
+      }
+      return;
+    }
+
+    // 한 + 입력기 영문: 사이트가 두벌식으로 조합
+    if(!window.Hangul || ime){ if(e.key !== "Shift") comp = null; return; }
     var live = comp && comp.el === el && el.selectionStart === comp.end && el.selectionEnd === comp.end;
     if(/^[a-zA-Z]$/.test(e.key)){
       var j = (e.shiftKey && MAP[e.key.toUpperCase()]) || MAP[e.key.toLowerCase()];
@@ -2223,7 +2246,24 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       return;
     }
     if(e.key !== "Shift") comp = null;   // 띄어쓰기 · 숫자 · 방향키 등에서 조합 끝
-  });
+  }, true);
+
+  document.addEventListener("compositionstart", function(e){
+    if(!on && target(e.target)) enStart = e.target.selectionStart;
+  }, true);
+  // 조합이 끝나면(위에서 바로 끝냄) 들어간 한글을 누른 자판 글자로 바꾼다
+  document.addEventListener("compositionend", function(e){
+    var el = e.target;
+    if(on || !target(el) || el !== enEl || !enQ.length) return;
+    var data = e.data || "", start = enStart;
+    var n = window.Hangul ? Hangul.disassemble(data).length : data.length;
+    var letters = enQ.splice(0, n || enQ.length).join("");
+    setTimeout(function(){
+      if(start == null || el.value.slice(start, start + data.length) !== data) return;
+      put(el, start, start + data.length, letters);
+    }, 0);
+  }, true);
+
   document.addEventListener("mousedown", function(){ comp = null; });
   document.addEventListener("focusin", function(){ comp = null; });
 })();
