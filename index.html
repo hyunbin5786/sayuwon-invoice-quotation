@@ -207,9 +207,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
-.histtable{min-width:1000px}
+.histtable{min-width:1140px}
 /* 발급 내역 창: 높이는 최대 720px(화면이 작으면 화면 높이 - 32px), 넘치는 내역은 표 안에서 스크롤 · 머리줄 고정 */
-#history-modal .modalbox{max-height:min(720px, calc(100vh - 32px))}
+#history-modal .modalbox{width:min(1320px,100%); max-height:min(720px, calc(100vh - 32px))}
 .histtable td{padding:7px 6px; font-variant-numeric:tabular-nums}
 .histtable td.num{text-align:right}
 .histtable .kind{display:inline-block; padding:1px 7px; border-radius:999px; font-size:11.5px; border:1px solid var(--line-strong); color:var(--muted)}
@@ -219,7 +219,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable tr.pending td{background:var(--surface-2)}
 .histtable tr.canceled td{color:var(--faint)}
 .histtable tr.canceled td:nth-child(n+3):nth-child(-n+7){text-decoration:line-through}
-.histtable .kind.void{border-color:var(--danger); color:var(--danger); margin-left:4px}
+.histtable .kind.void{border-color:var(--danger); color:var(--danger)}
+.histtable .kinds{display:flex; gap:4px; flex-wrap:wrap}
+.histtable .cancelinfo{flex:1; min-width:0; font-size:11.5px; color:var(--danger); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; align-self:center}
+.histtable tr.canceled .acts .btn{color:var(--ink)}
 .issuebar{display:none; margin-bottom:16px; padding:10px 14px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); font-size:13px}
 .issuebar.on{display:flex; align-items:center; justify-content:space-between; gap:10px}
 .steps{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-6px 0 16px}
@@ -490,8 +493,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     <div class="catscroll">
       <table class="cattable histtable">
         <thead><tr>
-          <th style="width:118px">발급 일시</th><th style="width:96px">구분</th><th style="width:118px">문서</th><th>수신</th>
-          <th style="width:104px">이용일</th><th style="width:110px;text-align:right">합계</th><th style="width:96px">담당</th><th style="width:236px"></th>
+          <th style="width:128px">발급 일시</th><th style="width:150px">구분</th><th style="width:118px">문서</th><th>수신</th>
+          <th style="width:104px">이용일</th><th style="width:110px;text-align:right">합계</th><th style="width:96px">담당</th><th style="width:300px"></th>
         </tr></thead>
         <tbody id="hist-body"></tbody>
       </table>
@@ -2432,16 +2435,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var off = !!h.canceled;
       return '<tr data-id="' + esc(h.id) + '"' + (off ? ' class="canceled"' : h.pending ? ' class="pending"' : '') + '>' +
         '<td>' + esc(fmtAt(h.at)) + (h.pending ? '<span class="sub">' + (histServer === false ? '이 브라우저에 보관' : '저장 중') + '</span>' : '') + '</td>' +
-        '<td><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
-          (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') +
-          (off ? '<span class="kind void">발급 취소</span><span class="sub">' + esc(fmtAt(h.canceled)) + (h.cancelNote ? ' · ' + esc(h.cancelNote) : '') + '</span>' : '') + '</td>' +
+        '<td><div class="kinds"><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
+          (off ? '<span class="kind void">발급 취소</span>' : '') + '</div>' +
+          (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') + '</td>' +
         '<td>' + esc(h.doc || "") + useTxt + '</td>' +
         '<td>' + esc(h.client || "") + '</td>' +
         '<td>' + esc(fmtDate(dateOnly(h.snapshot && h.snapshot.useDate || h.useDate), true)) + '</td>' +
         '<td class="num">' + won(h.total) + '원</td>' +
         '<td>' + esc(h.sender || "") + '</td>' +
         '<td><div class="acts">' + (off
-          ? '<button class="btn small" type="button" data-h="uncancel">취소 철회</button>'
+          // 취소한 줄: 취소 일시 · 사유를 버튼 왼쪽에 한 줄로 (길면 말줄임, 마우스를 올리면 전체)
+          ? '<span class="cancelinfo" title="' + esc("발급 취소 " + fmtAt(h.canceled) + (h.cancelNote ? " · " + h.cancelNote : "")) + '">취소 ' +
+              esc(fmtAt(h.canceled).slice(5)) + (h.cancelNote ? ' · ' + esc(h.cancelNote) : '') + '</span>' +
+            '<button class="btn small" type="button" data-h="uncancel">취소 철회</button>'
           : (h.snapshot ? '<button class="btn small" type="button" data-h="reissue">재발행</button><button class="btn small" type="button" data-h="revise">수정발행</button>' : '') +
             '<button class="btn small danger" type="button" data-h="cancel">발급 취소</button>') + '</div></td>' +
       '</tr>';
