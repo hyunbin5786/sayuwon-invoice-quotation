@@ -2202,13 +2202,25 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // 영어(A)인데 입력기가 한글일 때 누른 자판 글자들
   var enQ = [], enEl = null, enStart = null;
 
+  // 컴퓨터 입력기가 한글인지(마지막으로 본 상태). 한/영 키는 입력기도 같이 바꾸므로,
+  // 한/영 키 신호를 못 받아도(입력기가 한글이면 크롬이 'Process'로만 알려 줌)
+  // 글자를 칠 때 입력기 상태가 바뀌어 있으면 한/영 키를 누른 것으로 보고 한/A도 바꾼다
+  var osKo = null;
   document.addEventListener("keydown", function(e){
-    if(isHanYoung(e)){ setOn(!on); return; }   // 칸 밖에서 눌러도 바뀐다
+    var ime = e.isComposing || e.key === "Process" || e.keyCode === 229;
+    if(isHanYoung(e) || (ime && (e.code === "Lang1" || e.code === "AltRight"))){   // 칸 밖에서 눌러도 바뀐다
+      setOn(!on);
+      if(osKo !== null) osKo = !osKo;   // 입력기도 같이 바뀜
+      return;
+    }
     var el = e.target;
     if(!target(el)) return;
     if(e.key === " " && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey){ e.preventDefault(); setOn(!on); return; }
     if(e.ctrlKey || e.altKey || e.metaKey){ comp = null; return; }
-    var ime = e.isComposing || e.key === "Process" || e.keyCode === 229;
+    if(/^Key[A-Z]$/.test(e.code)){
+      if(osKo !== null && ime !== osKo) setOn(!on);   // 안 보이게 눌린 한/영 키
+      osKo = ime;
+    }
 
     // A + 입력기 한글: 누른 자판을 기억해 두고, 조합을 바로 끝내 자판 글자로 바꾼다
     if(!on){
