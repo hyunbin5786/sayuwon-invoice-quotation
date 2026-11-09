@@ -1821,7 +1821,10 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       if(!cur) return;
       if(label === "상품정보") cur.product = val;
       else if(label === "방문자정보") visitor = val.replace(/\(.*\)/, "").trim();
-      else if(label === "예약인원") cur.qty = toNum((val.match(/(\d+)\s*명/) || [])[1]);
+      else if(label === "예약인원"){
+        cur.qty = toNum((val.match(/(\d+)\s*명/) || [])[1]);
+        cur.student = toNum((val.match(/학생\s*[:：]?\s*(\d+)/) || [])[1]);   // 24명(어른 : 10명,학생 : 14명)
+      }
       else if(label === "상품금액") cur.price = toNum(val);
       else if(label === "할인금액") cur.discount = toNum(val);
       else if(label === "금액") cur.amount = toNum(val);
@@ -1833,11 +1836,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function discGroups(notes){
     var out = [];
     notes.forEach(function(s){
-      var m = s.match(/^(.*?)\s*(?:성인|어른|대인|청소년|어린이|소인|아동|경로|유아)?\s*(\d+)\s*명\s+(\d+(?:\.\d+)?)\s*%/);
+      var m = s.match(/^(.*?)\s*(성인|어른|대인|학생|청소년|어린이|소인|아동|경로|유아)?\s*(\d+)\s*명\s+(\d+(?:\.\d+)?)\s*%/);
       if(!m) return;
       var name = m[1].replace(/\(\s*\d+(?:\.\d+)?\s*%\s*\)/g, "").trim();
-      var pct = Number(m[3]);
-      out.push({ qty: Number(m[2]), pct: pct, note: (name ? name + " " : "") + "할인 " + pct + "% 적용" });
+      var pct = Number(m[4]);
+      // cat: 이 할인이 어느 인원에 붙는지 (학생 / 성인). 관람이 성인 · 학생 줄로 나뉘었을 때 맞는 줄에만 적용
+      var cat = m[2] === "학생" ? "student" : /성인|어른|대인/.test(m[2] || "") ? "adult" : "";
+      out.push({ qty: Number(m[3]), pct: pct, cat: cat, note: (name ? name + " " : "") + "할인 " + pct + "% 적용" });
     });
     return out;
   }
@@ -1886,7 +1891,23 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       var fixed = rows.reduce(function(s,x){ return s + (open.indexOf(x) < 0 ? (Number(x.price)||0) * qty : 0); }, 0);
       if(open.length === 1 && b.price) open[0].price = Math.round(Math.max(0, b.price - fixed) / qty);
     }
-    var gross = rows.reduce(function(s,x){ return s + (Number(x.price)||0) * qty; }, 0);
+    // 예약인원에 학생이 있으면(24명(어른 : 10명,학생 : 14명)) 관람을 성인 줄 · 학생 줄로 나눈다
+    var stu = Number(b.student) || 0;
+    if(stu > 0){
+      var split = [];
+      rows.forEach(function(r){
+        var p = product(r.pid);
+        if(!p || p.kind !== "view" || /학생/.test(p.src || "") || stu > (Number(r.qty) || 0)){ split.push(r); return; }
+        var sv = findBySrc(/주말|공휴일/.test(p.src || p.name || "") ? "주말/공휴일 관람(학생)" : "평일 관람(학생)");
+        if(!sv){ warns.push("학생 관람 품목이 품목 목록에 없어 학생 " + stu + "명을 나누지 못했습니다."); split.push(r); return; }
+        r.qty = (Number(r.qty) || 0) - stu; r.cat = "adult";
+        var s = placeRow(sv.id, stu); s.cat = "student"; s.disc = r.disc;
+        if(r.qty > 0) split.push(r);
+        split.push(s);
+      });
+      rows = split;
+    }
+    var gross = rows.reduce(function(s,x){ return s + (Number(x.price)||0) * (Number(x.qty)||0); }, 0);
     if(b.price && gross !== b.price){
       warns.push('"' + b.product + '" : 품목 단가 합계 ' + won(gross) + '원과 상품금액 ' + won(b.price) + '원이 다릅니다.');
     }
@@ -1899,7 +1920,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       rows.forEach(function(r){
         if(!r.disc){ r.rate = 0; r.tRate = true; r.note = ""; out.push(r); return; }
         var left = Number(r.qty) || 0, parts = [];
-        groups.forEach(function(g){
+        groups.filter(function(g){ return !r.cat || !g.cat || g.cat === r.cat; }).forEach(function(g){
           var n = Math.min(g.qty, left); if(n <= 0) return;
           left -= n;
           parts.push(Object.assign({}, r, { key: uid++, qty: n, rate: g.pct, tRate: true, note: g.note, tNote: true }));
