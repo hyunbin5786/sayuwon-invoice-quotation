@@ -1033,8 +1033,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // ---------- editor rendering ----------
   var elRows = document.getElementById("rows");
 
-  function optionsFor(form){
-    return CATALOG.filter(function(p){ return p.form === form && !p.hidden && (p.sys || p.src); })
+  // keep: 지금 행이 쓰는 품목은 숨긴(삭제한) 품목이어도 목록에 남겨 빈칸으로 보이지 않게
+  function optionsFor(form, keep){
+    return CATALOG.filter(function(p){ return p.form === form && (p.id === keep || (!p.hidden && (p.sys || p.src))); })
       .sort(function(a, b){ return (a.sys ? 1 : 0) - (b.sys ? 1 : 0) || byKind(a, b); })
       .map(function(p){
         var u = unitPrice(p);
@@ -1175,7 +1176,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     card.innerHTML =
       '<div class="rowhead">' +
         '<span class="tag ' + (formOf(r) === "sayuwon" ? "green" : "steel") + '">' + (formOf(r) === "sayuwon" ? "사유원" : "신라철강") + '</span>' +
-        '<select data-f="pid">' + optionsFor(form) + '</select>' +
+        '<select data-f="pid">' + optionsFor(form, r.pid) + '</select>' +
         '<button class="iconbtn" type="button" data-act="del" aria-label="행 삭제">✕</button>' +
       '</div>' +
       '<div><span class="numlabel">품명</span><input type="text" data-f="name" placeholder="품명을 입력하세요"></div>' +
