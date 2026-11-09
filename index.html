@@ -208,6 +208,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
 .histtable{min-width:1000px}
+/* 발급 내역 창: 높이는 최대 720px(화면이 작으면 화면 높이 - 32px), 넘치는 내역은 표 안에서 스크롤 · 머리줄 고정 */
+#history-modal .modalbox{max-height:min(720px, calc(100vh - 32px))}
 .histtable td{padding:7px 6px; font-variant-numeric:tabular-nums}
 .histtable td.num{text-align:right}
 .histtable .kind{display:inline-block; padding:1px 7px; border-radius:999px; font-size:11.5px; border:1px solid var(--line-strong); color:var(--muted)}
