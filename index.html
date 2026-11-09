@@ -183,7 +183,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .sheet td.ctr{text-align:center; font-variant-numeric:tabular-nums}
 .sheet tr.total td{background:#d9d9d9; font-weight:700; font-size:14.5px; height:46px}
 .sheet tr.total td.label{text-align:center}
-.sheet .vatline{margin-top:10px; text-align:right; font-size:13px; color:#333; font-variant-numeric:tabular-nums}
 .sheet .footnote{
   position:absolute; left:52px; right:52px; bottom:40px;
   font-size:13px; color:#222; white-space:pre-wrap; line-height:1.6;
@@ -1274,9 +1273,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       ? '<tr class="total"><td class="label" colspan="4">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">' + (taxOf(form) === "면세" ? "-" : "Vat 포함") + '</td></tr>'
       : '<tr class="total"><td class="label" colspan="3">견적금액</td><td class="num">'+won(total)+'</td><td class="ctr">Vat 포함</td></tr>';
 
-    var supply = Math.round(total / 1.1), vat = total - supply;
-    var vatLine = isSay ? "" :
-      '<div class="vatline">공급가액 ' + won(supply) + '원 &nbsp;·&nbsp; 부가세 ' + won(vat) + '원</div>';
 
     var useTxt = state.useDateText.trim() || fmtDate(state.useDate, true);
     var mgr = state.clientMgr.trim();
@@ -1301,7 +1297,6 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       '<table><colgroup>' + widths.map(function(w){ return '<col style="width:'+w+'">'; }).join("") + '</colgroup>' +
         '<thead><tr>' + cols.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join("") + '</tr></thead>' +
         '<tbody>' + body + totalRow + '</tbody></table>' +
-      vatLine +
       (state.footnote.trim() ? '<div class="footnote">' + esc(state.footnote.trim()) + '</div>' : '') +
     '</div>';
   }
@@ -1662,14 +1657,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     cell(lastRow, CN-1, total, { size:11, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
     cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
 
-    // 공급가액 / 부가세 · 안내문구
+    // 안내문구 (공급가액 · 부가세 줄은 넣지 않고 총 금액만)
     var after = lastRow, next = lastRow + 2;
-    if(!isSay){
-      var supply = Math.round(total/1.1);
-      ws.mergeCells(next, C0, next, CN);
-      cell(next, C0, "공급가액 " + won(supply) + "원  ·  부가세 " + won(total-supply) + "원", { size:11, h:"right" });
-      after = next; next += 2;
-    }
     if(state.footnote.trim()){
       ws.mergeCells(next, C0, next+1, CN);
       cell(next, C0, state.footnote.trim(), { size:11, wrap:true });
