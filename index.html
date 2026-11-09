@@ -207,6 +207,23 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
+.steps{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-6px 0 16px}
+.step{display:inline-flex; align-items:center; gap:7px; padding:6px 12px 6px 6px; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--muted); font:inherit; font-size:13px; cursor:pointer}
+.step b{display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--surface-2); font-size:12px}
+.step.on{border-color:var(--accent); color:var(--ink); font-weight:600}
+.step.on b{background:var(--accent); color:#fff}
+.steparrow{color:var(--faint)}
+#parseinfo:not(:empty){margin-bottom:16px}
+.startbox{width:min(860px,100%)}
+.startbody{display:grid; grid-template-columns:1.4fr 1fr; gap:14px; padding:16px; overflow:auto}
+@media (max-width:700px){ .startbody{grid-template-columns:1fr} }
+.startcard{border:1px solid var(--line); border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:10px; background:var(--surface-2)}
+.startcard h3{margin:0; font-size:15px}
+.startcard p{margin:0; font-size:12.5px; color:var(--muted); line-height:1.5}
+.startcard textarea{min-height:170px; font-size:12.5px; width:100%; padding:8px 10px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); resize:vertical}
+.startcard textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+#parseinfo:not(:empty){padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface)}
+#parseinfo .warn:first-child{margin-top:0}
 .mailbody{padding:16px; display:flex; flex-direction:column; gap:14px; overflow:auto}
 .mailrow{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px}
 .mailrow label{margin:0}
@@ -265,7 +282,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   <header class="top">
     <div class="brand">
       <h1>견적서&amp;거래명세서 발행</h1>
-      <span class="sub">예약 정보를 붙여넣으면 사유원 · 신라철강 견적서와 거래명세서가 자동으로 채워집니다</span>
+      <span class="sub">예약 정보를 붙여넣거나 직접 입력해 사유원 · 신라철강 견적서와 거래명세서를 만듭니다</span>
     </div>
     <div class="rulechips">
       <span class="chip green">수목원 관람 · 면세 · 5%/10% 자동</span>
@@ -275,21 +292,19 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     </div>
   </header>
 
+  <!-- 3단계: 1 시작(붙여넣기 / 직접 생성) → 2 문서 작성 → 3 출력 · 메일 -->
+  <nav class="steps" aria-label="진행 단계">
+    <button type="button" class="step" data-step="1"><b>1</b>시작</button>
+    <span class="steparrow" aria-hidden="true">›</span>
+    <button type="button" class="step" data-step="2"><b>2</b>문서 작성</button>
+    <span class="steparrow" aria-hidden="true">›</span>
+    <button type="button" class="step" data-step="3"><b>3</b>출력 · 메일</button>
+  </nav>
+
   <div class="app">
     <!-- ================= EDITOR ================= -->
     <div>
-      <section class="panel">
-        <h2>예약 정보 붙여넣기</h2>
-        <div class="body">
-          <div class="field">
-            <textarea id="f-raw" style="min-height:150px;font-size:12.5px" placeholder="예약 시스템의 '상품 정보'를 그대로 붙여넣으세요&#10;방문일자(순번)	2026.11.09 (24)&#10;상품정보	평일 관람(13:00~18:00)&#10;예약인원	18명(어른 : 18명)&#10;..."></textarea>
-          </div>
-          <div class="addrow">
-            <button class="btn primary wide" type="button" id="parse">자동 채우기</button>
-          </div>
-          <div id="parseinfo"></div>
-        </div>
-      </section>
+      <div id="parseinfo"></div>
 
       <section class="panel">
         <h2>기본 정보</h2>
@@ -425,6 +440,29 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 </div>
 
 <!-- ================= 품목 관리 ================= -->
+<div class="modal" id="start-modal" hidden>
+  <div class="modalbox startbox" role="dialog" aria-modal="true" aria-labelledby="start-title">
+    <div class="modalhead">
+      <h2 id="start-title">어떻게 만들까요?</h2>
+      <button class="iconbtn" type="button" id="start-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="startbody">
+      <section class="startcard">
+        <h3>예약 정보 붙여넣기</h3>
+        <p>예약 시스템의 '상품 정보'를 붙여넣으면 품목 · 인원 · 이용일이 자동으로 채워집니다.</p>
+        <textarea id="f-raw" placeholder="예약 시스템의 '상품 정보'를 그대로 붙여넣으세요&#10;방문일자(순번)	2026.11.09 (24)&#10;상품정보	평일 관람(13:00~18:00)&#10;예약인원	18명(어른 : 18명)&#10;..."></textarea>
+        <div id="start-err"></div>
+        <button class="btn primary block" type="button" id="parse">자동 채우기</button>
+      </section>
+      <section class="startcard">
+        <h3>직접 생성하기</h3>
+        <p>예약 정보 없이 빈 문서에서 시작합니다. 기본 정보와 품목을 하나씩 입력합니다.</p>
+        <button class="btn block" type="button" id="start-blank" style="margin-top:auto">직접 생성하기</button>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="mail-modal" hidden>
   <div class="modalbox mailbox" role="dialog" aria-modal="true" aria-labelledby="mail-title">
     <div class="modalhead">
@@ -1851,10 +1889,16 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   function applyBooking(){
     var res = parseBooking(document.getElementById("f-raw").value);
     var info = document.getElementById("parseinfo");
-    if(!res.blocks.length){
-      info.innerHTML = '<div class="warn">방문일자 · 상품정보 형식의 예약 정보를 찾지 못했습니다.</div>';
+    if(!res.blocks.length){   // 시작 팝업에 그대로 남아 다시 붙여넣게
+      document.getElementById("start-err").innerHTML = '<div class="warn">방문일자 · 상품정보 형식의 예약 정보를 찾지 못했습니다.</div>';
       return;
     }
+    // 새 문서로 시작 (이전에 쓰던 수신 · 품목 등은 비운다)
+    var keepRaw = document.getElementById("f-raw").value;
+    defaultState();
+    editMode = "edit";
+    closeStart();
+    document.getElementById("f-raw").value = keepRaw;
     var warns = [], rows = [];
     res.blocks.forEach(function(b){ rows = rows.concat(blockRows(b, warns)); });
     // 사유원(관람) 먼저
@@ -1877,8 +1921,9 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var made = totalOf("sayuwon") + totalOf("shilla");
     // 문제가 있을 때만 알린다
     if(made !== booked) warns.unshift("견적 합계 " + won(made) + "원 / 예약 금액 " + won(booked) + "원 (차이 " + won(made - booked) + "원)");
-    info.innerHTML = warns.map(function(w){ return '<div class="warn">' + esc(w) + '</div>'; }).join("");
-    if(warns.length) setEditOpen(true);   // 확인할 게 있으면 품목란을 펼쳐 둔다
+    info.innerHTML = warns.length ? '<div class="small" style="font-weight:600;margin-bottom:4px">예약 정보 확인</div>' +
+      warns.map(function(w){ return '<div class="warn">' + esc(w) + '</div>'; }).join("") : "";
+    setEditOpen(warns.length > 0);   // 확인할 게 있으면 품목란을 펼쳐 둔다
   }
 
   // ---------- 품목 관리 ----------
@@ -2102,12 +2147,58 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   bindField("f-pax", "pax", { num:true, after: applyPax });
   bindField("f-footnote", "footnote");
 
+  // 예약에서 채운 문서는 "문서 수정하기", 직접 만드는 문서는 "문서 생성하기" (같은 품목 편집 칸)
+  var editMode = "edit";
   function setEditOpen(open){
     document.getElementById("editarea").hidden = !open;
     var b = document.getElementById("toggle-edit");
-    b.textContent = open ? "문서 수정 닫기" : "문서 수정하기";
+    var word = editMode === "create" ? "생성" : "수정";
+    b.textContent = open ? "문서 " + word + " 닫기" : "문서 " + word + "하기";
     b.setAttribute("aria-expanded", open ? "true" : "false");
   }
+
+  // ---------- 단계: 1 시작 → 2 문서 작성 → 3 출력 · 메일 ----------
+  var elStart = document.getElementById("start-modal");
+  function paintSteps(){
+    var cur = !elStart.hidden ? 1 : !document.getElementById("mail-modal").hidden ? 3 : 2;
+    var bs = document.querySelectorAll(".steps .step");
+    for(var i=0;i<bs.length;i++){
+      var on = Number(bs[i].getAttribute("data-step")) === cur;
+      bs[i].classList.toggle("on", on);
+      if(on) bs[i].setAttribute("aria-current", "step"); else bs[i].removeAttribute("aria-current");
+    }
+  }
+  function hasWork(){ return state.rows.length > 0 || !!state.client.trim(); }
+  function openStart(){
+    if(hasWork() && !confirm("지금 작성 중인 내용을 지우고 새로 시작할까요?")) return;
+    document.getElementById("f-raw").value = "";
+    document.getElementById("start-err").innerHTML = "";
+    elStart.hidden = false; paintSteps();
+    document.getElementById("f-raw").focus();
+  }
+  function closeStart(){ elStart.hidden = true; paintSteps(); }
+  function startBlank(){
+    defaultState();
+    editMode = "create";
+    closeStart();
+    document.getElementById("parseinfo").innerHTML = "";
+    paint(); status("");
+    setEditOpen(true);
+    document.getElementById("f-client").focus();
+  }
+  document.getElementById("start-blank").addEventListener("click", startBlank);
+  document.getElementById("start-close").addEventListener("click", function(){
+    if(!hasWork()) editMode = "create", setEditOpen(true);   // 아무것도 고르지 않고 닫으면 직접 생성
+    closeStart();
+  });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elStart.hidden) document.getElementById("start-close").click(); });
+  document.querySelector(".steps").addEventListener("click", function(e){
+    var b = e.target.closest(".step"); if(!b) return;
+    var n = b.getAttribute("data-step");
+    if(n === "1") openStart();
+    else if(n === "2"){ closeMail(); if(!elStart.hidden) document.getElementById("start-close").click(); }
+    else document.getElementById("out-real").click();
+  });
   document.getElementById("toggle-edit").addEventListener("click", function(){
     setEditOpen(document.getElementById("editarea").hidden);
   });
@@ -2118,9 +2209,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     state.rows.push(makeRow("etc_item")); renderRows(); renderDoc();
   });
 
-  document.getElementById("reset").addEventListener("click", function(){
-    defaultState(); paint(); status("");
-  });
+  document.getElementById("reset").addEventListener("click", openStart);   // 새로 작성 = 1단계로
   document.getElementById("out-real").addEventListener("click", function(){ makeOutput(); });
 
   // ---------- 메일 문구 ----------
@@ -2135,8 +2224,8 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     for(var i=0;i<bs.length;i++) bs[i].classList.toggle("on", bs[i].getAttribute("data-v") === doc);
     document.getElementById("mail-status").textContent = "";
   }
-  function openMail(){ mailDoc = null; mailFill(); elMail.hidden = false; document.getElementById("mail-subject").focus(); }
-  function closeMail(){ elMail.hidden = true; }
+  function openMail(){ mailDoc = null; mailFill(); elMail.hidden = false; paintSteps(); document.getElementById("mail-subject").focus(); }
+  function closeMail(){ elMail.hidden = true; paintSteps(); }
   document.getElementById("open-mail").addEventListener("click", openMail);
   document.getElementById("mail-close").addEventListener("click", closeMail);
   elMail.addEventListener("click", function(e){ if(e.target === elMail) closeMail(); });
@@ -2156,6 +2245,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   });
 
   paint();
+  openStart();   // 처음 열면 1단계: 붙여넣기 / 직접 생성 고르기
 })();
 
 // ---------- 한글 자동 입력 ----------
