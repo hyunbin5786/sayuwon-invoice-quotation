@@ -787,6 +787,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       it.disc = c[2] === "1";
       var base = it.name;
       if(edits[src]) Object.assign(it, edits[src]);
+      if(MABANG[src] && it.kind === "food") it.kind = "mabang";   // 예전에 '식사'로 바꿔 둔 기본 몽몽마방 메뉴 (사유의 밥상)
       if(!String(it.name || "").trim()) it.name = base;   // 품명을 비워 두면 기본 품명
       list.push(it);
     });
