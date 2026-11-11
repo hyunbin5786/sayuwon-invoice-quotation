@@ -294,6 +294,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 .kobtn{min-width:40px; font-weight:700; padding-left:10px; padding-right:10px}
 .kobtn.on{background:var(--accent); border-color:var(--accent); color:#fff}
+/* ?catalog=1 : 단체예약 도우미 안에서 품목 관리 창만 */
+html.cat-only body > *:not(#catalog-modal){display:none !important}
+html.cat-only body{background:transparent}
+html.cat-only #catalog-modal{background:transparent; padding:0}
+html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100vh; border-radius:0; box-shadow:none}
 </style>
 
 <div class="wrap">
@@ -666,6 +671,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     var pkg = src.match(/\(관람,\s*([^)]*)\)/);
     if(pkg) return { kind:"package", form:"shilla", name: pkg[1].replace(/\d부$/, "").trim(), weekend: /주말|공휴일/.test(src) };
     if(isViewName(src)) return { kind:"view", form:"sayuwon", name: (/주말|공휴일/.test(src) ? "주말 관람" : "평일 관람") + (/학생/.test(src) ? "(학생)" : "") };
+    if(MABANG[src]) return { kind:"mabang", form:"shilla", name: MABANG_NAME[src] || src };
     return { kind: GROUP_TIME[src] ? "gtime" : GROUP_EACH[src] ? "geach" : GOODS[src] ? "goods" : "food", form: /관람권/.test(src) ? "sayuwon" : "shilla", name: src.replace(/\((수정|변경)\)/g, "").trim() };
   }
   // 예약 시스템에서 '굿즈'로 묶인 상품과 판매용 물품
@@ -682,9 +688,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
   // 단체(시간): 시간 단위로 받는 단체 프로그램 / 단체(개별): 인원 수만큼 받는 단체 프로그램
   var GROUP_TIME = {}, GROUP_EACH = {};
   ["대관","세미나","해설사도슨트(수정)","임원도슨트(수정)"].forEach(function(n){ GROUP_TIME[n] = true; });
-  ["사운드워킹","사유의 향","요가프로그램(단체)","음료쿠폰(가가빈빈)","음료쿠폰(몽몽차방)","사유의 밥상(단체)"].forEach(function(n){ GROUP_EACH[n] = true; });
-  var KIND_LABEL = { gtime:"단체(시간)", geach:"단체(개별)", view:"관람", package:"관람+식사", food:"식사", goods:"굿즈" };
-  var KIND_ORDER = { gtime:0, geach:1, view:2, package:3, food:4, goods:5 };
+  ["사운드워킹","사유의 향","요가프로그램(단체)","음료쿠폰(가가빈빈)","음료쿠폰(몽몽차방)"].forEach(function(n){ GROUP_EACH[n] = true; });
+  // 몽몽마방 메뉴: 단체예약 도우미의 몽몽마방 식사에서 고르는 메뉴 (1인 고정가). 품목 관리에서 구분을 '몽몽마방 메뉴'로 하면 메뉴가 늘어남
+  var MABANG = {};
+  var MABANG_NAME = {"사유의 밥상(단체)":"사유의 밥상","몽몽마방 런치":"비빔밥+녹두전+매실차","몽몽마방 단품":"더덕비빔밥"};
+  ["사유의 밥상(단체)","몽몽마방 런치","몽몽마방 단품"].forEach(function(n){ MABANG[n] = true; });
+  var KIND_LABEL = { gtime:"단체(시간)", geach:"단체(개별)", view:"관람", package:"관람+식사", mabang:"몽몽마방 메뉴", food:"식사", goods:"굿즈" };
+  var KIND_ORDER = { gtime:0, geach:1, view:2, package:3, mabang:4, food:5, goods:6 };
   function byKind(a, b){
     return (KIND_ORDER[a.kind] - KIND_ORDER[b.kind]) || String(a.src).localeCompare(String(b.src), "ko");
   }
@@ -746,6 +756,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
         if(ops.some(function(o){ return o.op === "replace"; })){ try { localStorage.removeItem(CAT_KEY); } catch(e){} legacyEdits = {}; }
         if(syncQ.length){ savedEdits = JSON.parse(JSON.stringify(res.data || {})); setSync("dirty"); return; }   // 저장 중에 또 고친 것은 남겨 둔다
         applyShared(res.data); setSync("saved");
+        if(CAT_ONLY) tellParent("saved");   // 도우미가 가격 · 메뉴를 다시 불러오게
       })
       .catch(function(){ syncBusy = false; syncQ = ops.concat(syncQ); setSync("error"); });
     setSync("saving");
@@ -2198,8 +2209,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
       if(confirm("저장하지 않은 변경이 있습니다.\n[확인] 저장하고 닫기 / [취소] 저장하지 않고 닫기")) flushOps();
       else discardCatEdits();
     }
+    if(CAT_ONLY){ tellParent("close"); return; }   // 단체예약 도우미 안에서 연 품목 관리: 닫기는 도우미 창이 함
     elCat.hidden = true; renderRows(); renderDoc();
   }
+  // ?catalog=1 : 단체예약 도우미가 품목 관리 창만 띄워 쓰는 모드 (같은 공유 목록)
+  var CAT_ONLY = /[?&]catalog=1(&|$)/.test(location.search);
+  function tellParent(ev){ try { if(window.parent !== window) window.parent.postMessage({ type:"sy-catalog", ev: ev }, "*"); } catch(e){} }
   document.getElementById("cat-save").addEventListener("click", flushOps);
   window.addEventListener("beforeunload", function(e){ if(catDirty()){ e.preventDefault(); e.returnValue = ""; } });
   document.getElementById("open-catalog").addEventListener("click", function(){
@@ -2209,6 +2224,13 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
     document.getElementById("cat-search").focus();
   });
   document.getElementById("cat-close").addEventListener("click", closeCatalog);
+  if(CAT_ONLY){
+    document.documentElement.classList.add("cat-only");
+    document.getElementById("open-catalog").click();
+    window.addEventListener("message", function(e){   // 도우미의 × 를 누르면 저장 안 한 변경을 먼저 묻는다
+      if(e.data && e.data.type === "sy-catalog" && e.data.ev === "close-request") closeCatalog();
+    });
+  }
   elCat.addEventListener("click", function(e){ if(e.target === elCat) closeCatalog(); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elCat.hidden) closeCatalog(); });
 
