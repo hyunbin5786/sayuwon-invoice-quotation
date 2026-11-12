@@ -1670,7 +1670,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         msgs.push(COMPANY[f].name + " 양식의 품목이 " + MAX_ROWS + "개를 넘어 한 장에 다 들어가지 않습니다.");
       }
     });
-    var blank = state.rows.filter(function(r){ return !String(r.name||"").trim() || !(Number(r.price)>0) || !(Number(r.qty)>0); }).length;
+    var blank = state.rows.filter(function(r){ return !String(r.name||"").trim() || !(Number(r.price) > 0 || (isDiscRow(r) && Number(r.price) < 0)) || !(Number(r.qty)>0); }).length;
     if(blank) msgs.push("품명 · 단가 · 수량이 비어 있는 행이 " + blank + "개 있습니다.");
     w.innerHTML = msgs.map(function(m){ return '<div class="warn">' + esc(m) + '</div>'; }).join("");
   }
