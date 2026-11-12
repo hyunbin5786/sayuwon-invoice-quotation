@@ -1875,66 +1875,109 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     });
   }
 
-  // 시트 하나에 그 묶음의 양식(사유원, 신라철강)을 위아래로 넣고, 인쇄할 때 양식마다 한 장씩 나오게 페이지를 나눈다
+  // 엑셀을 인쇄해도 사이트 PDF와 같게: PDF로 찍는 문서(HTML)를 실제로 그려 각 줄 · 칸의 위치(px)를 재고,
+  // 엑셀 열 너비 · 행 높이 · 인쇄 여백을 그 값 그대로 맞춘다 (A4, 1px = 1/96인치)
+  // 열: 표 폭 690px 안에서 사유원 · 신라철강 칸 경계를 모두 담은 격자 (양식마다 필요한 만큼 합쳐 씀)
+  var XL_COLS = [166,14,48,35,41,48,14,13,83,21,207];   // 8열 시작(366px) = 발신 글자 자리 (엑셀 셀 안쪽 여백만큼 보정)
+  var XL_SPAN = {
+    sayuwon: [[1,1],[2,3],[4,5],[6,8],[9,10],[11,11]],   // 품명 · 수량 · 정상가 · 할인가 · 금액 · 비고
+    shilla:  [[1,2],[3,4],[5,6],[7,9],[10,11]]            // 품명 · 인원,시간 · 단가 · 금액 · 비고
+  };
+  var XL_TOTAL = { sayuwon: 8, shilla: 6 };   // 합계 줄 「견적금액」이 덮는 마지막 열
+  var XL_META = 7;                            // 수신 쪽은 1~7열, 발신 쪽은 8열부터
+  var XL_PAD = { x:52, top:46, bottom:40 };   // .sheet 여백(px) = 인쇄 여백
+  // 열 너비: 한국어 엑셀의 기본 글꼴(맑은 고딕 11, 숫자 폭 8px) 기준. 엑셀은 인쇄할 때 열을 화면보다 2~3% 넓게 잡아
+  // 쪽에 맞추려고 전체(행 높이까지)를 줄여 버리므로, 열을 그만큼 미리 좁혀 100% 크기로 찍히게 한다
+  var XL_SHRINK = 0.97;
+
+  function measureSheet(form){
+    var host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-20000px;top:0;width:794px;background:#fff;";
+    host.innerHTML = sheetHTML(form);
+    document.body.appendChild(host);
+    var s = host.firstElementChild; s.style.boxShadow = "none";
+    var b = s.getBoundingClientRect();
+    function R(el){ if(!el) return null; var r = el.getBoundingClientRect(); return { x:r.left - b.left, y:r.top - b.top, w:r.width, h:r.height, b:r.bottom - b.top }; }
+    var m = {
+      title: R(s.querySelector(".titlebox")),
+      meta: Array.prototype.map.call(s.querySelector(".meta .col").children, R),
+      amount: R(s.querySelector(".amountline")),
+      table: R(s.querySelector("table")),
+      trs: Array.prototype.map.call(s.querySelectorAll("table tr"), R),
+      seal: R(s.querySelector(".seal")),
+      foot: R(s.querySelector(".footnote"))
+    };
+    host.remove();
+    return m;
+  }
+
+  // 시트 하나에 그 묶음의 양식(사유원, 신라철강)을 위아래로 넣고, 인쇄할 때 양식마다 A4 한 장씩 나오게 페이지를 나눈다
   function addFormSheet(wb, name, rows){
     withRows(rows, function(){
       var ws = wb.addWorksheet(name, {
         views: [{ showGridLines:false }],
-        pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0,
-                     margins:{ left:0.5, right:0.5, top:0.6, bottom:0.6, header:0.3, footer:0.3 } }
+        pageSetup: { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0, horizontalCentered:true,
+                     margins:{ left:XL_PAD.x/96, right:XL_PAD.x/96, top:XL_PAD.top/96, bottom:0.25, header:0, footer:0 } }   // 아래 여백은 PDF(40px)보다 좁게: 엑셀이 행을 살짝 크게 찍어도 안내문구가 다음 쪽으로 넘치지 않게 (내용 끝 위치는 PDF와 같음)
       });
-      [1.625,28,11,12,12,14.5,40.5].forEach(function(w,i){ ws.getColumn(i+1).width = w; });
-      var forms = activeForms(), top = 2;
+      // 엑셀은 열마다 정수 px로 잘라 그리므로, 누적 경계를 반올림해 열 너비를 나눈다 (오차가 쌓여 칸이 밀리지 않게)
+      var cum = 0, prev = 0;
+      XL_COLS.forEach(function(px, i){
+        cum += px; var edge = Math.round(cum * XL_SHRINK);
+        ws.getColumn(i+1).width = (edge - prev) / 8; prev = edge;
+      });
+      var forms = activeForms(), top = 1, last = 1;
       forms.forEach(function(f, i){
-        var bottom = drawForm(wb, ws, f, top);
-        if(i < forms.length - 1){ ws.getRow(bottom).addPageBreak(); top = bottom + 2; }
+        last = drawForm(wb, ws, f, top);
+        if(i < forms.length - 1){ ws.getRow(last).addPageBreak(); top = last + 1; }
       });
+      ws.pageSetup.printArea = "A1:" + ws.getColumn(XL_COLS.length).letter + last;
     });
   }
 
-  // 양식 하나를 top 행부터 그리고 마지막 행 번호를 돌려준다. 열은 B~G 공통:
-  // 사유원 = 품명 · 수량 · 정상가 · 할인가 · 금액 · 비고 / 신라철강 = 품명 · 인원,시간 · 단가(D:E) · 금액 · 비고
+  // 양식 하나를 top 행부터 그리고 마지막 행 번호를 돌려준다
   function drawForm(wb, ws, form, top){
     var isSay = form === "sayuwon";
     var c = COMPANY[form], rows = rowsOf(form), total = totalOf(form);
-    var C0 = 2, CN = 7;
-    var span = isSay ? [[2,2],[3,3],[4,4],[5,5],[6,6],[7,7]] : [[2,2],[3,3],[4,5],[6,6],[7,7]];
-
-    function cell(r, col, val, opt){
-      var x = ws.getCell(r, col);
+    var C0 = 1, CN = XL_COLS.length, span = XL_SPAN[form];
+    var m = measureSheet(form);
+    var r = top, y = XL_PAD.top, hs = [];
+    // 문서 위에서 target(px)까지를 한 행으로
+    function rowTo(target){
+      var px = Math.max(1, Math.round(target) - y);
+      ws.getRow(r).height = px * 0.75; hs.push(px); y += px;
+      return r++;
+    }
+    function cell(rr, col, val, opt){
+      var x = ws.getCell(rr, col);
       if(val !== undefined && val !== null && val !== "") x.value = val;
       opt = opt || {};
-      x.font = { name:XLFONT, size: opt.size || 10.5, bold: !!opt.bold, underline: !!opt.underline };
-      x.alignment = { horizontal: opt.h || "left", vertical:"middle", wrapText: !!opt.wrap };
+      x.font = { name:XLFONT, size: opt.size || 10, bold: !!opt.bold, underline: !!opt.underline, color:{ argb: opt.color || "FF000000" } };
+      x.alignment = { horizontal: opt.h || "left", vertical: opt.v || "middle", wrapText: !!opt.wrap, indent: opt.indent || 0 };
       if(opt.fill) x.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:GREY } };
       if(opt.border) x.border = opt.border;
       if(opt.fmt) x.numFmt = opt.fmt;
       return x;
     }
-    function tb(r, col, first, last){
-      return { top:{ style: r===first ? "medium" : "thin" }, bottom:{ style: r===last ? "medium" : "thin" },
+    function tb(rr, col, first, last){
+      return { top:{ style: rr===first ? "medium" : "thin" }, bottom:{ style: rr===last ? "medium" : "thin" },
                left:{ style: col===C0 ? "medium" : "thin" }, right:{ style: col===CN ? "medium" : "thin" } };
     }
-
-    // 칸 하나(신라철강 단가는 D:E 두 칸)를 채운다
-    function put(r, i, val, opt, first, last){
-      var s = span[i][0], e = span[i][1];
-      if(e > s) ws.mergeCells(r, s, r, e);
+    // 표 칸 하나(여러 열을 합친 칸)를 채운다. noMerge: 품명처럼 아래 줄과 세로로 합칠 칸
+    function put(rr, s, e, val, opt, first, last, noMerge){
+      if(e > s && !noMerge) ws.mergeCells(rr, s, rr, e);
       for(var col=s; col<=e; col++){
-        opt.border = tb(r, col, first, last);
-        cell(r, col, col === s ? val : null, opt);
+        opt.border = tb(rr, col, first, last);
+        cell(rr, col, col === s ? val : null, opt);
       }
     }
 
     // 제목
-    var r = top;
-    ws.mergeCells(r, C0, r+1, CN);
-    cell(r, C0, docTitle(), { size:23, bold:true, underline:true, h:"center" });
-    [r, r+1, r+2, r+3].forEach(function(i){ ws.getRow(i).height = 24.95; });
-    ws.getRow(r+4).height = 30;
+    var tr = rowTo(m.title.b);
+    ws.mergeCells(tr, C0, tr, CN);
+    cell(tr, C0, docTitle(), { size:22.5, bold:true, underline:true, h:"center" });
 
     // 수신 / 발신
-    var mr = r + 5;
+    rowTo(m.meta[0].y);
     var useTxt = state.useDateText.trim() || fmtDate(state.useDate, true);
     var mgr = state.clientMgr.trim();
     var left  = ["수     신 : " + state.client,
@@ -1944,88 +1987,83 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
                  "담     당 : " + state.sender,
                  "발 행 일 : " + fmtDate(issueDate(), true)];
     for(var i=0;i<3;i++){
-      ws.getRow(mr+i).height = 30;
-      ws.mergeCells(mr+i, C0, mr+i, C0+1);
-      cell(mr+i, C0, left[i],  { size:11, bold:true });
-      cell(mr+i, CN, right[i], { size:11, bold:true });
+      var mr = rowTo(m.meta[i].b);
+      ws.mergeCells(mr, C0, mr, XL_META);
+      ws.mergeCells(mr, XL_META + 1, mr, CN);
+      cell(mr, C0, left[i], { size:11, bold:true });
+      cell(mr, XL_META + 1, right[i], { size:11, bold:true });
     }
-    ws.getRow(mr+3).height = 27.75;
 
-    // 견적금액
-    var ar = mr + 4;
-    ws.getRow(ar).height = 27;
-    ws.mergeCells(ar, C0, ar, C0+1);
-    cell(ar, C0, "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + taxOf(form) + ")", { size:11, bold:true });
-    for(var col=C0; col<=CN; col++){
-      var b = ws.getCell(ar, col);
-      b.border = { bottom:{ style:"medium" } };
-    }
+    // 견적금액 (아래 굵은 선)
+    rowTo(m.amount.y);
+    var ar = rowTo(m.amount.b);
+    ws.mergeCells(ar, C0, ar, CN);
+    for(var col=C0; col<=CN; col++) cell(ar, col, col === C0 ? "견 적 금 액 : " + (isSay ? "" : "₩ ") + won(total) + "원(" + taxOf(form) + ")" : null,
+      { size:11, bold:true, v:"top", border:{ bottom:{ style:"medium" } } });
 
     // 표
-    var hr = ar + 1;
-    ws.getRow(hr).height = 34.9;
+    rowTo(m.table.y);
     var cols = isSay ? ["품  명","수량","정상가","할인가","금 액","비  고"]
                      : ["품  명","인원, 시간","단가","금 액","비  고"];
-    var minRows = MIN_ROWS[form];
-    var nRows = Math.max(rows.length, minRows);
-    var lastRow = hr + nRows + 1;
-    cols.forEach(function(h, i){
-      put(hr, i, h, { size:11, bold:true, h:"center", fill:true }, hr, lastRow);
-    });
+    var nRows = Math.max(rows.length, MIN_ROWS[form]);
+    var hr = rowTo(m.trs[0].b), lastRow = hr + nRows + 1;
+    cols.forEach(function(h, k){ put(hr, span[k][0], span[k][1], h, { size:10.5, bold:true, h:"center", fill:true }, hr, lastRow); });
 
     var aligns = isSay ? ["left","center","right","right","right","center"]
                        : ["left","center","right","right","center"];
+    var spans = nameSpans(rows);
     for(var k=0;k<nRows;k++){
-      var rr = hr + 1 + k, d = rows[k];
-      ws.getRow(rr).height = 39;
+      var rr = rowTo(m.trs[k + 1].b), d = rows[k];
       var vals = !d ? new Array(cols.length).fill(null)
         : (d.adj || d.isDiscount) ? (isSay ? [d.name, null, null, null, amount(d), d.note] : [d.name, null, null, amount(d), d.note])
         : (isSay ? [d.name, d.qty || null, d.price || null, d.price ? (Number(d.rate) ? discPrice(d) : 0) : null, amount(d) || null, d.note]
                  : [d.name, d.qty || null, d.price ? discPrice(d) : null, amount(d) || null, d.note]);
-      vals.forEach(function(v, i){
-        put(rr, i, v, {
-          size:11, h:aligns[i], wrap: i===cols.length-1,
+      vals.forEach(function(v, i2){
+        var note = i2 === cols.length - 1, al = aligns[i2];
+        put(rr, span[i2][0], span[i2][1], v, {
+          size: note ? 9.5 : 10, h:al, wrap: i2 === 0 || note, indent: al === "center" ? 0 : 1,
           fmt: typeof v === "number" ? "#,##0" : null
-        }, hr, lastRow);
+        }, hr, lastRow, i2 === 0 && !!d && (spans[k] > 1 || spans[k] === 0));
       });
     }
     // 같은 품명이 이어지면 품명 칸을 세로로 합친다
-    nameSpans(rows).forEach(function(n, k){
-      if(n > 1) ws.mergeCells(hr + 1 + k, C0, hr + k + n, C0);
+    spans.forEach(function(n, k2){
+      if(n > 1) ws.mergeCells(hr + 1 + k2, span[0][0], hr + k2 + n, span[0][1]);
     });
 
     // 합계
-    ws.getRow(lastRow).height = 30;
-    ws.mergeCells(lastRow, C0, lastRow, CN-2);
-    for(var col2=C0; col2<=CN; col2++){
-      cell(lastRow, col2, null, { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, col2, hr, lastRow) });
-    }
-    cell(lastRow, C0, "견적금액", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, C0, hr, lastRow) });
-    cell(lastRow, CN-1, total, { size:11, bold:true, h:"right", fill:true, fmt:"#,##0", border: tb(lastRow, CN-1, hr, lastRow) });
-    cell(lastRow, CN, taxOf(form) === "면세" ? "-" : "Vat 포함", { size:11, bold:true, h:"center", fill:true, border: tb(lastRow, CN, hr, lastRow) });
+    rowTo(m.trs[nRows + 1].b);
+    var amt = span[span.length - 2], vat = span[span.length - 1];
+    var tot = { size:11, bold:true, h:"center", fill:true };
+    put(lastRow, C0, XL_TOTAL[form], "견적금액", Object.assign({}, tot), hr, lastRow);
+    put(lastRow, amt[0], amt[1], total, Object.assign({}, tot, { h:"right", indent:1, fmt:"#,##0" }), hr, lastRow);
+    put(lastRow, vat[0], vat[1], taxOf(form) === "면세" ? "-" : "Vat 포함", Object.assign({}, tot), hr, lastRow);
 
-    // 안내문구 (공급가액 · 부가세 줄은 넣지 않고 총 금액만)
-    var after = lastRow, next = lastRow + 2;
-    if(state.footnote.trim()){
-      ws.mergeCells(next, C0, next+1, CN);
-      cell(next, C0, state.footnote.trim(), { size:11, wrap:true });
-      after = next + 1;
+    // 안내문구: PDF처럼 쪽 맨 아래 (회색 윗선 + 글)
+    var after = lastRow;
+    if(m.foot && state.footnote.trim()){
+      var safe = 3;   // 인쇄 반올림으로 다음 쪽으로 넘치지 않게 조금 덜 채운다
+      var fr = rowTo(m.foot.y - safe);
+      for(var col3=C0; col3<=CN; col3++) cell(fr, col3, null, { border:{ bottom:{ style:"thin", color:{ argb:"FF999999" } } } });
+      rowTo(m.foot.y + 11 - safe);
+      var nr = rowTo(m.foot.b - safe);
+      ws.mergeCells(nr, C0, nr, CN);
+      cell(nr, C0, state.footnote.trim(), { size:10, wrap:true, v:"top", color:"FF222222" });
+      after = nr;
     }
 
-    // 직인: 미리보기처럼 발신 회사명 끝에 20px 겹치고, 발신 줄 세로 가운데에 놓는다.
-    // ExcelJS의 소수 열/행 위치는 실제 픽셀과 어긋나므로 EMU(1px = 9525)로 직접 지정한다.
+    // 직인: PDF에서 잰 자리(발신 회사명 끝에 겹침) 그대로. ExcelJS의 소수 위치는 어긋나므로 EMU(1px = 9525)로 직접
     try{
-      var imgId = wb.addImage({ base64: SEAL[form].split(",")[1], extension:"png" });
-      var SW = 62, SH = 64, EMU = 9525;
-      var textW = xlTextWidth(right[0], 11, true);
-      var x = Math.max(0, Math.round(3 + textW - 20));           // 셀 왼쪽 여백 약 3px
-      var prevH = (ws.getRow(mr-1).height || 15) * 4 / 3;          // 발신 윗줄 높이(px)
-      var lineH = (ws.getRow(mr).height || 15) * 4 / 3;            // 발신 줄 높이(px)
-      var y = Math.round(prevH + lineH / 2 - SH / 2);              // 윗줄 맨 위에서부터
-      ws.addImage(imgId, {
-        tl: { nativeCol: CN - 1, nativeColOff: x * EMU, nativeRow: mr - 2, nativeRowOff: y * EMU },
-        ext: { width:SW, height:SH }, editAs:"oneCell"
-      });
+      if(m.seal){
+        var imgId = wb.addImage({ base64: SEAL[form].split(",")[1], extension:"png" });
+        var EMU = 9525, sx = m.seal.x - XL_PAD.x, sy = m.seal.y - XL_PAD.top;
+        var ci = 0, cx = 0; while(ci < XL_COLS.length - 1 && cx + XL_COLS[ci] <= sx){ cx += XL_COLS[ci]; ci++; }
+        var ri = 0, ry = 0; while(ri < hs.length - 1 && ry + hs[ri] <= sy){ ry += hs[ri]; ri++; }
+        ws.addImage(imgId, {
+          tl: { nativeCol: ci, nativeColOff: Math.round((sx - cx) * XL_SHRINK) * EMU, nativeRow: top - 1 + ri, nativeRowOff: Math.round(sy - ry) * EMU },
+          ext: { width: Math.round(m.seal.w), height: Math.round(m.seal.h) }, editAs:"oneCell"
+        });
+      }
     } catch(e){}
     return after;
   }
