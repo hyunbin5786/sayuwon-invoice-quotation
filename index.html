@@ -1043,7 +1043,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
   // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
   function fakeRows(){
-    var out = [], diff = { sayuwon:0, shilla:0 }, same = {};
+    // pre: 예약에서 이미 받은 금액 할인(기타할인 등). 외부용에서는 늘어난 금액과 합쳐 '할인' 한 줄로
+    var out = [], diff = { sayuwon:0, shilla:0 }, pre = { sayuwon:0, shilla:0 }, same = {};
     // 같은 품목 · 같은 단가 · 같은 발급처면 한 줄로 합쳐 수량만 더한다
     function mergeKey(x){ return x.pid + "|" + formOf(x) + "|" + (Number(x.price) || 0) + "|" + (x.name || ""); }
     function pushMerged(x){
@@ -1053,6 +1054,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     }
     state.rows.forEach(function(r){
       var lines = state.swaps[r.key];
+      if(r.isDiscount){ pre[formOf(r)] -= amount(r); return; }
       if(isViewRow(r) || !lines || !lines.length){
         // 할인 없는 기존 품목은 바꾼 품목과 합칠 수 있도록 복사해서 넣는다
         if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(Object.assign({}, r));
@@ -1069,7 +1071,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       diff[f] -= amount(r);
     });
     ["sayuwon","shilla"].forEach(function(f){
-      if(diff[f] > 0) out.push({ key:"adj-" + f, adj:true, pid:"etc_item", name:"할인", qty:1, price:-diff[f], rate:0, note:"", form:f, disc:false });
+      var d = diff[f] + pre[f];
+      if(d > 0) out.push({ key:"adj-" + f, adj:true, pid:"etc_item", name:"할인", qty:1, price:-d, rate:0, note:"", form:f, disc:false });
     });
     return out;
   }
@@ -1166,6 +1169,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     list.innerHTML = state.rows.map(function(r){
       var head = '<div class="swaphead"><b>' + esc(r.name || "(품명 없음)") + '</b><span class="amt">' +
         won(r.qty) + ' × ' + won(discPrice(r)) + ' = ' + won(amount(r)) + '원</span></div>';
+      if(r.isDiscount) return '';   // 예약의 금액 할인은 바꾸지 않음 (외부용에서는 할인 한 줄에 합쳐짐)
       if(isViewRow(r)) return '<div class="swapcard">' + head + '<div class="swaplock">관람은 바꿀 수 없습니다</div></div>';
       var lines = state.swaps[r.key] || [];
       return '<div class="swapcard" data-key="' + r.key + '">' + head +
@@ -1391,7 +1395,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       return spans[i] === 0 ? '' : '<td' + (spans[i] > 1 ? ' rowspan="' + spans[i] + '"' : '') + '>' + esc(r.name) + '</td>';
     }
     rows.forEach(function(r, ri){
-      if(r.adj){   // 외부용 할인 줄: 품명과 금액만
+      if(r.adj || r.isDiscount){   // 할인 줄(외부용 할인 · 예약의 금액 할인): 품명과 금액만
         body += '<tr><td>' + esc(r.name) + '</td>' + (isSay ? '<td></td><td></td><td></td>' : '<td></td><td></td>') +
           '<td class="num">' + won(amount(r)) + '</td><td class="note">' + esc(r.note) + '</td></tr>';
         return;
@@ -1814,7 +1818,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       var rr = hr + 1 + k, d = rows[k];
       ws.getRow(rr).height = 39;
       var vals = !d ? new Array(cols.length).fill(null)
-        : d.adj ? (isSay ? [d.name, null, null, null, amount(d), d.note] : [d.name, null, null, amount(d), d.note])
+        : (d.adj || d.isDiscount) ? (isSay ? [d.name, null, null, null, amount(d), d.note] : [d.name, null, null, amount(d), d.note])
         : (isSay ? [d.name, d.qty || null, d.price || null, d.price ? (Number(d.rate) ? discPrice(d) : 0) : null, amount(d) || null, d.note]
                  : [d.name, d.qty || null, d.price ? discPrice(d) : null, amount(d) || null, d.note]);
       vals.forEach(function(v, i){
@@ -2019,11 +2023,10 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var applied = rows.reduce(function(s, r){ return s + (Number(r.price) || 0) * (Number(r.qty) || 0) - amount(r); }, 0);
     if(b.discount && !applied && rows.length){
       rows.forEach(function(r){ r.rate = 0; r.note = ""; });
-      var noteM = b.notes.map(function(s){ return s.replace(/\s*-\s*[\d,]+\s*\(.*$/, "").replace(/\s*-\s*[\d,]+\s*$/, "").trim(); }).filter(Boolean)[0];
       var d = placeRow("etc_item", 1);
       d.name = "할인"; d.tName = true; d.isDiscount = true;
       d.price = -b.discount; d.rate = 0; d.tRate = true;
-      d.note = noteM || ""; d.tNote = true;
+      d.note = ""; d.tNote = true;   // 외부용 할인 줄과 같은 모양: 품명 「할인」과 금액만
       d.form = rows[0].form;   // 할인받은 품목과 같은 양식에
       d.grp = d.key;
       rows.push(d);
