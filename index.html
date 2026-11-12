@@ -428,13 +428,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         </div>
       </section>
 
-      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">문서 수정하기</button>
+      <button class="btn block" type="button" id="toggle-edit" aria-expanded="false" style="margin-top:16px">내부용 문서 편집</button>
 
       <!-- 품목 · 안내문구는 필요할 때만 펼친다 -->
       <div id="editarea" hidden>
         <section class="panel">
           <h2>품목 <span id="itemcount" style="font-weight:500;letter-spacing:0"></span></h2>
           <div class="body">
+            <div id="realorder"></div>
             <div id="rows" style="display:flex;flex-direction:column;gap:12px"></div>
             <div class="addrow">
               <button class="btn wide" type="button" id="add-view">+ 관람</button>
@@ -1237,23 +1238,15 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     renderFakeOrder();
   }
 
-  // ---------- 외부용 품목 순서 ----------
-  // ⋮⋮ 손잡이를 끌어 놓거나 ▲▼로 외부용 문서의 품목 순서를 바꾼다. 할인 줄은 늘 맨 아래.
+  // ---------- 품목 순서 (내부용 · 외부용) ----------
+  // ⋮⋮ 손잡이를 끌어 놓거나 ▲▼로 문서의 품목 순서를 바꾼다. 할인 줄은 늘 맨 아래.
   // 끌다가 커서가 화면(입력 칸) 위 · 아래 끝에 가까워지거나 밖으로 나가면 저절로 스크롤된다.
   var ordDrag = null;
-  function renderFakeOrder(){
-    var box = document.getElementById("fakeorder");
-    if(ordDrag) return;   // 끄는 중에는 다시 그리지 않음
-    if(state.docUse !== "fake" || !state.rows.length){ box.innerHTML = ""; return; }
-    var groups = withRows(fakeRows(), function(){
-      return activeForms().map(function(f){
-        return { f: f, items: rowsOf(f).filter(function(r){ return !isDiscRow(r); }).map(function(r){
-          return { k: r.ok, name: r.name || "(품명 없음)", qty: Number(r.qty) || 0, amt: amount(r) };
-        }) };
-      });
-    });
-    box.innerHTML = '<div class="ordhead">외부용 품목 순서 <span class="small">⋮⋮를 끌어 놓거나 ▲▼로 바꿈 · 할인 줄은 늘 맨 아래</span></div>' +
-      groups.filter(function(g){ return g.items.length; }).map(function(g){
+  function orderHTML(title, groups){
+    groups = groups.filter(function(g){ return g.items.length; });
+    if(!groups.length) return "";
+    return '<div class="ordhead">' + title + ' <span class="small">⋮⋮를 끌어 놓거나 ▲▼로 바꿈 · 할인 줄은 늘 맨 아래</span></div>' +
+      groups.map(function(g){
         return '<div class="ordform">' + COMPANY[g.f].name + '</div><div class="ordlist" data-form="' + g.f + '">' +
           g.items.map(function(it, i){
             return '<div class="orditem" data-k="' + esc(it.k) + '">' +
@@ -1266,10 +1259,38 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
           }).join("") + '</div>';
       }).join("");
   }
-  // 화면에 보이는 순서를 그대로 기억한다
-  function saveFakeOrder(){
-    state.fakeOrder = [].map.call(document.querySelectorAll("#fakeorder .orditem"), function(el){ return el.getAttribute("data-k"); });
+  function orderGroups(keyOf){
+    return activeForms().map(function(f){
+      return { f: f, items: rowsOf(f).filter(function(r){ return !isDiscRow(r); }).map(function(r){
+        return { k: keyOf(r), name: r.name || "(품명 없음)", qty: Number(r.qty) || 0, amt: amount(r) };
+      }) };
+    });
+  }
+  function boxKeys(box){ return [].map.call(box.querySelectorAll(".orditem"), function(el){ return el.getAttribute("data-k"); }); }
+
+  // 외부용: 외부용 문서에만 적용 (state.fakeOrder)
+  function renderFakeOrder(){
+    var box = document.getElementById("fakeorder");
+    if(ordDrag) return;   // 끄는 중에는 다시 그리지 않음
+    if(state.docUse !== "fake" || !state.rows.length){ box.innerHTML = ""; return; }
+    box.innerHTML = withRows(fakeRows(), function(){ return orderHTML("외부용 품목 순서", orderGroups(function(r){ return r.ok; })); });
+  }
+  function saveFakeOrder(box){
+    state.fakeOrder = boxKeys(box);
     renderFakeOrder(); renderDoc();
+  }
+  // 내부용: 품목(state.rows) 순서 자체를 바꾼다 (외부용은 따로 정하지 않았으면 이 순서를 따름)
+  function renderRealOrder(){
+    var box = document.getElementById("realorder");
+    if(ordDrag || !box) return;
+    box.innerHTML = state.rows.length ? orderHTML("내부용 품목 순서", orderGroups(function(r){ return String(r.key); })) : "";
+  }
+  function saveRealOrder(box){
+    var keys = boxKeys(box), byKey = {};
+    state.rows.forEach(function(r){ byKey[String(r.key)] = r; });
+    var moved = keys.map(function(k){ return byKey[k]; }).filter(Boolean);
+    state.rows = moved.concat(state.rows.filter(function(r){ return moved.indexOf(r) < 0; }));   // 할인 줄 등 목록에 없는 줄은 뒤에
+    renderRows(); renderDoc();
   }
   function scrollHost(el){
     var sc = el.parentElement;
@@ -1280,14 +1301,13 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     }
     return null;
   }
-  (function(){
-    var box = document.getElementById("fakeorder");
+  function setupOrderBox(box, save){
     box.addEventListener("click", function(e){
       var b = e.target.closest("[data-ord]"); if(!b) return;
       var it = b.closest(".orditem"), list = it.parentElement;
       if(b.getAttribute("data-ord") === "up" && it.previousElementSibling) list.insertBefore(it, it.previousElementSibling);
       else if(b.getAttribute("data-ord") === "down" && it.nextElementSibling) list.insertBefore(it.nextElementSibling, it);
-      saveFakeOrder();
+      save(box);
     });
     box.addEventListener("pointerdown", function(e){
       var g = e.target.closest(".grip"); if(!g || e.button !== 0) return;
@@ -1300,7 +1320,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       document.body.appendChild(it);
       ordDrag = { it: it, ph: ph, list: list, dy: e.clientY - r.top, y: e.clientY, sc: scrollHost(list), raf: 0, id: e.pointerId };
       try { box.setPointerCapture(e.pointerId); } catch(_){}
-      ordDrag.raf = requestAnimationFrame(ordTick);
+      ordDrag.raf = requestAnimationFrame(tick);
     });
     function place(){
       var d = ordDrag; if(!d) return;
@@ -1311,7 +1331,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       if(before) d.list.insertBefore(d.ph, before); else d.list.appendChild(d.ph);
     }
     // 커서가 스크롤 영역 위 · 아래 60px 안이나 그 밖이면, 가까울수록(멀리 나갈수록) 빠르게 스크롤
-    function ordTick(){
+    function tick(){
       var d = ordDrag; if(!d) return;
       var top = 0, bottom = window.innerHeight;
       if(d.sc){ var sr = d.sc.getBoundingClientRect(); top = Math.max(0, sr.top); bottom = Math.min(window.innerHeight, sr.bottom); }
@@ -1323,7 +1343,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         else window.scrollBy(0, v);
         place();
       }
-      d.raf = requestAnimationFrame(ordTick);
+      d.raf = requestAnimationFrame(tick);
     }
     box.addEventListener("pointermove", function(e){ if(!ordDrag) return; ordDrag.y = e.clientY; place(); });
     function drop(){
@@ -1333,11 +1353,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       d.list.insertBefore(d.it, d.ph); d.ph.remove();
       try { box.releasePointerCapture(d.id); } catch(_){}
       ordDrag = null;
-      saveFakeOrder();
+      save(box);
     }
     box.addEventListener("pointerup", drop);
     box.addEventListener("pointercancel", drop);
-  })();
+  }
+  setupOrderBox(document.getElementById("fakeorder"), saveFakeOrder);
+  setupOrderBox(document.getElementById("realorder"), saveRealOrder);
+
 
   (function(){
     var list = document.getElementById("swaplist");
@@ -1595,6 +1618,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   }
 
   function renderDoc(){
+    renderRealOrder();   // 내부용 품목 순서 목록 (수량 · 금액 표시가 바뀌므로 같이)
     var forms = activeForms();
     if(!forms.length){
       elPreview.innerHTML = "";   // 품목이 없으면 오른쪽은 비워 둔다
@@ -2452,13 +2476,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   bindField("f-pax", "pax", { num:true, after: applyPax });
   bindField("f-footnote", "footnote");
 
-  // 예약에서 채운 문서는 "문서 수정하기", 직접 만드는 문서는 "문서 생성하기" (같은 품목 편집 칸)
+  // 예약에서 채운 문서는 "내부용 문서 편집", 직접 만드는 문서는 "문서 생성하기" (같은 품목 편집 칸)
   var editMode = "edit";
   function setEditOpen(open){
     document.getElementById("editarea").hidden = !open;
     var b = document.getElementById("toggle-edit");
-    var word = editMode === "create" ? "생성" : "수정";
-    b.textContent = open ? "문서 " + word + " 닫기" : "문서 " + word + "하기";
+    // 예약에서 채운 문서: 「내부용 문서 편집」, 직접 만드는 문서: 「문서 생성하기」 (같은 품목 편집 칸)
+    var label = editMode === "create" ? ["문서 생성하기", "문서 생성 닫기"] : ["내부용 문서 편집", "내부용 문서 편집 닫기"];
+    b.textContent = open ? label[1] : label[0];
     b.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
