@@ -919,8 +919,11 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     return Math.round(base * (100 - rate) / 100);
   }
   function amount(r){ return discPrice(r) * (Number(r.qty) || 0); }
+  // 할인 줄(외부용 할인 · 금액 할인 · 음수 금액)은 양식마다 무조건 맨 아래로
+  function isDiscRow(r){ return !!(r.adj || r.isDiscount || (Number(r.price) || 0) < 0); }
   function rowsOf(form){
-    return state.rows.filter(function(r){ return formOf(r) === form; });
+    var list = state.rows.filter(function(r){ return formOf(r) === form; });
+    return list.filter(function(r){ return !isDiscRow(r); }).concat(list.filter(isDiscRow));
   }
   function totalOf(form){
     return rowsOf(form).reduce(function(s,r){ return s + amount(r); }, 0);
@@ -2018,7 +2021,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       rows.forEach(function(r){ r.rate = 0; r.note = ""; });
       var noteM = b.notes.map(function(s){ return s.replace(/\s*-\s*[\d,]+\s*\(.*$/, "").replace(/\s*-\s*[\d,]+\s*$/, "").trim(); }).filter(Boolean)[0];
       var d = placeRow("etc_item", 1);
-      d.name = "할인"; d.tName = true;
+      d.name = "할인"; d.tName = true; d.isDiscount = true;
       d.price = -b.discount; d.rate = 0; d.tRate = true;
       d.note = noteM || ""; d.tNote = true;
       d.form = rows[0].form;   // 할인받은 품목과 같은 양식에
@@ -2046,7 +2049,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var warns = [], rows = [];
     res.blocks.forEach(function(b){ rows = rows.concat(blockRows(b, warns)); });
     // 사유원(관람) 먼저
-    rows.sort(function(a, b){ return (a.form === "sayuwon" ? 0 : 1) - (b.form === "sayuwon" ? 0 : 1); });
+    rows.sort(function(a, b){ return (a.form === "sayuwon" ? 0 : 1) - (b.form === "sayuwon" ? 0 : 1) || (isDiscRow(a) ? 1 : 0) - (isDiscRow(b) ? 1 : 0); });
 
     var dates = res.blocks.map(function(b){ return b.date; }).filter(Boolean).sort();
     if(dates.length && dates[0] !== dates[dates.length-1]) warns.push("방문일자가 서로 다른 예약이 섞여 있습니다. 이용일을 확인해 주세요.");
