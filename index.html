@@ -2613,15 +2613,30 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   }
   function histLabel(h){ return fmtAt(h.at) + " " + (h.client || "") + " " + (h.doc || ""); }
 
-  function recordIssue(files){
+  // 수신 · 이용일 · 합계가 같은 지난 발급(취소한 것 제외) 중 가장 최근 것
+  function findSameIssue(client, useDate, total){
+    var c = String(client || "").trim(), d = dateOnly(useDate);
+    return allHistory().filter(function(x){
+      return !x.canceled && String(x.client || "").trim() === c &&
+        dateOnly(x.snapshot && x.snapshot.useDate || x.useDate) === d && Number(x.total) === Number(total);
+    }).sort(function(a, b){ return String(b.at).localeCompare(String(a.at)); })[0] || null;
+  }
+  async function recordIssue(files){
+    var meta = issueMeta;
     var h = { id: histId(), at: new Date().toISOString(),
-      kind: issueMeta ? issueMeta.kind : "new", parent: issueMeta ? issueMeta.parent : "",
+      kind: meta ? meta.kind : "new", parent: meta ? meta.parent : "",
       doc: docName(), client: state.client.trim(), useDate: state.useDate, issueDate: issueDate(),
       total: totalOf("sayuwon") + totalOf("shilla"), sender: state.sender, use: state.docUse,
       files: files, snapshot: JSON.parse(JSON.stringify(state)) };
-    histPending.push(h); writeArr(HIST_PENDING, histPending);
-    if(issueMeta && issueMeta.kind === "revise") setIssueMeta({ kind:"revise", parent: h.id, label: histLabel(h) });   // 또 고쳐 출력하면 이번 것의 수정발행
+    if(meta && meta.kind === "revise") setIssueMeta({ kind:"revise", parent: h.id, label: histLabel(h) });   // 또 고쳐 출력하면 이번 것의 수정발행
     else setIssueMeta(null);
+    // 발급 내역을 거치지 않은 출력이라도 수신 · 이용일 · 합계가 같은 발급이 있으면 그 문서의 수정발행으로 본다
+    if(!meta){
+      try { await Promise.race([flushHistory().then(loadHistory), new Promise(function(r){ setTimeout(r, 4000); })]); } catch(e){}
+      var same = findSameIssue(h.client, h.useDate, h.total);
+      if(same){ h.kind = "revise"; h.parent = same.id; }
+    }
+    histPending.push(h); writeArr(HIST_PENDING, histPending);
     flushHistory();
   }
   // 발급 취소 / 취소 철회는 서버에 올리기 전까지 이 브라우저에 모아 둔다: [{id, canceled, cancelNote}]
