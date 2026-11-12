@@ -99,6 +99,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 }
 .iconbtn:hover{color:var(--danger); border-color:var(--danger)}
 .numlabel{font-size:10.5px; letter-spacing:.04em; color:var(--muted); display:block; margin-bottom:3px}
+.numlabel.innote{color:var(--accent); font-weight:600}
 .rowcard input{width:100%; padding:7px 8px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface)}
 .rowcard input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
 .rowcard input.num{text-align:right; font-variant-numeric:tabular-nums}
@@ -1054,7 +1055,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     }
     state.rows.forEach(function(r){
       var lines = state.swaps[r.key];
-      if(r.isDiscount){ pre[formOf(r)] -= amount(r); return; }
+      // 할인 줄(예약의 금액 할인 · 직접 넣은 마이너스 줄)은 외부용에서 늘어난 금액과 합쳐 '할인' 한 줄로. 비고(내부용 메모)는 외부용에 안 나옴
+      if(r.isDiscount || (!isViewRow(r) && (Number(r.price) || 0) < 0 && !(lines && lines.length))){ pre[formOf(r)] -= amount(r); return; }
       if(isViewRow(r) || !lines || !lines.length){
         // 할인 없는 기존 품목은 바꾼 품목과 합칠 수 있도록 복사해서 넣는다
         if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(Object.assign({}, r));
@@ -1250,6 +1252,13 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     });
   })();
 
+  // 할인 줄의 비고는 내부용 문서에만 찍힌다 (외부용은 할인 한 줄로 합쳐지고 비고 없음)
+  function paintNoteLabel(card, r){
+    var on = isDiscRow(r), lab = card.querySelector("[data-notelabel]"), inp = card.querySelector('[data-f="note"]');
+    lab.textContent = on ? "내부용 비고 (외부용에는 안 나옴)" : "비고";
+    lab.classList.toggle("innote", on);
+    inp.placeholder = on ? "내부용 문서에만 찍힐 글씨 (예: 현장 협의 할인)" : "비고";
+  }
   function rowCard(r){
     var form = r.form;
     var card = document.createElement("div");
@@ -1266,7 +1275,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         '<div><span class="numlabel">정상 단가</span><input class="num" type="number" min="0" step="100" inputmode="numeric" data-f="price"></div>' +
         '<div><span class="numlabel">할인율 %</span><input class="num" type="number" min="0" max="100" step="1" inputmode="numeric" data-f="rate"></div>' +
       '</div>' +
-      '<div><span class="numlabel">비고</span><input type="text" data-f="note" placeholder="비고"></div>';
+      '<div><span class="numlabel" data-notelabel>비고</span><input type="text" data-f="note" placeholder="비고"></div>';
 
     var sel = card.querySelector('[data-f="pid"]');
     sel.value = r.pid;
@@ -1289,7 +1298,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     bindText(card, r, "name", "tName");
     bindText(card, r, "note", "tNote");
     bindNum(card, r, "qty", "tQty", function(){ r.qtyFixed = true; });   // 직접 고친 수량은 인원 변경을 따라가지 않음
-    bindNum(card, r, "price", null);
+    bindNum(card, r, "price", null, function(){ paintNoteLabel(card, r); });
     bindNum(card, r, "rate", "tRate", function(){
       if(!r.tNote){
         r.note = autoNote(Number(r.rate)||0);
@@ -1298,6 +1307,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     });
 
     syncCard(card, r);
+    paintNoteLabel(card, r);
     return card;
   }
 
