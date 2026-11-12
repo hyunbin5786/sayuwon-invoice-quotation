@@ -272,6 +272,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .swapline input{text-align:right}
 .swapline .lamt{text-align:right; font-size:12.5px; font-variant-numeric:tabular-nums}
 .swaplock{font-size:12px; color:var(--faint)}
+.fqline{display:grid; grid-template-columns:auto 76px minmax(0,1fr); gap:8px; align-items:center; font-size:12.5px}
+.fqline label{color:var(--muted)}
+.fqline input{width:100%; padding:6px 7px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); font-size:12.5px; text-align:right}
+.fqline input.fixed{border-color:var(--accent); background:var(--accent-soft)}
+.fqline .lamt{text-align:right; font-variant-numeric:tabular-nums}
 #fakepanel{overflow:visible}
 #fakepanel > h2{border-radius:10px 10px 0 0}
 .info{position:relative; display:inline-flex}
@@ -896,7 +901,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       sender: loadSender(), pax: null,
       footnote: "", rows: [], docType: "quote", payMode: "online",   // 기본: 견적서 · 인터넷 결제
       docUse: "real", swaps: {},   // 외부용: 행 key → [{pid, qty}] 바꿀 품목
-      fakeOrder: []   // 외부용 문서의 품목 순서 (외부용 줄 열쇠 목록)
+      fakeOrder: [],  // 외부용 문서의 품목 순서 (외부용 줄 열쇠 목록)
+      fakeQty: {}     // 외부용에서만 다른 수량(인원수): 행 key → 수량. 늘거나 준 금액은 외부용 '할인' 한 줄에서 맞춘다
     };
   }
   function loadSender(){
@@ -1059,6 +1065,13 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     return best && best.r.ok ? { pid: best.p.id, name: best.p.name, qty: best.r.qtys[best.r.qtys.length - 1], disc: best.r.tot - s.target, rowKey: s.rows[s.rows.length - 1].key } : null;
   }
   function swapLineAmount(l){ return (Number(product(l.pid).price) || 0) * (Number(l.qty) || 0); }
+  // 외부용에서만 다르게 정한 수량 (없거나 내부용과 같으면 null)
+  function fakeQtyOf(r){
+    var v = state.fakeQty && state.fakeQty[r.key];
+    if(v === undefined || v === null || v === "") return null;
+    v = Number(v);
+    return isFinite(v) && v >= 0 && v !== (Number(r.qty) || 0) ? v : null;
+  }
   // 내부용 행 → 외부용 행. 관람은 그대로, 바꾼 품목은 정가로 넣고 늘어난 금액은 양식별 '할인' 한 줄로
   function fakeRows(){
     // pre: 예약에서 이미 받은 금액 할인(기타할인 등). 외부용에서는 늘어난 금액과 합쳐 '할인' 한 줄로
@@ -1076,9 +1089,12 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       // 할인 줄(예약의 금액 할인 · 직접 넣은 마이너스 줄)은 외부용에서 늘어난 금액과 합쳐 '할인' 한 줄로. 비고(내부용 메모)는 외부용에 안 나옴
       if(r.isDiscount || (!isViewRow(r) && (Number(r.price) || 0) < 0 && !(lines && lines.length))){ pre[formOf(r)] -= amount(r); return; }
       if(isViewRow(r) || !lines || !lines.length){
+        var cp = Object.assign({}, r), fq = fakeQtyOf(r);
+        // 외부용에서만 수량(인원수)을 바꿨으면, 달라진 금액은 할인 한 줄에서 맞춘다
+        if(fq != null){ cp.qty = fq; diff[formOf(r)] += amount(cp) - amount(r); }
         // 할인 없는 기존 품목은 바꾼 품목과 합칠 수 있도록 복사해서 넣는다
-        if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(Object.assign({}, r));
-        else out.push(Object.assign({}, r, { ok: "r:" + r.key }));
+        if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(cp);
+        else out.push(Object.assign(cp, { ok: "r:" + r.key }));
         return;
       }
       var f = formOf(r);
@@ -1166,6 +1182,9 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var keys = {};
     state.rows.forEach(function(r){ if(!isViewRow(r)) keys[r.key] = true; });
     Object.keys(state.swaps).forEach(function(k){ if(!keys[k]) delete state.swaps[k]; });   // 지운 행 · 관람으로 바뀐 행
+    var live = {}; state.rows.forEach(function(r){ live[r.key] = true; });
+    state.fakeQty = state.fakeQty || {};
+    Object.keys(state.fakeQty).forEach(function(k){ if(!live[k]) delete state.fakeQty[k]; });   // 지운 행의 외부용 수량
     Object.keys(state.swaps).forEach(function(k){
       state.swaps[k].forEach(function(l){ var cap = maxQtyOf(l.pid); if((Number(l.qty) || 0) > cap) l.qty = cap; });
     });
@@ -1186,6 +1205,17 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       '<button class="iconbtn" type="button" data-sw="del" aria-label="바꿀 품목 빼기">✕</button>' +
     '</div>';
   }
+  // 외부용 수량(인원수): 비우면 내부용과 같음. 바꾸면 늘거나 준 금액은 외부용 할인 한 줄에서 맞춘다
+  function fakeQtyHTML(r){
+    var fq = fakeQtyOf(r), q = Number(r.qty) || 0;
+    var cp = Object.assign({}, r, { qty: fq == null ? q : fq });
+    return '<div class="fqline">' +
+      '<label>외부용 수량</label>' +
+      '<input type="number" min="0" step="1" inputmode="numeric" data-fq' + (fq != null ? ' class="fixed"' : '') +
+        ' value="' + (fq != null ? fq : "") + '" placeholder="' + won(q) + '" title="비우면 내부용과 같음" aria-label="외부용 수량">' +
+      '<span class="lamt">' + (fq != null ? won(fq) + ' × ' + won(discPrice(r)) + ' = ' + won(amount(cp)) + '원' : '') + '</span>' +
+    '</div>';
+  }
   function renderFakePanel(){
     var panel = document.getElementById("fakepanel");
     panel.hidden = state.docUse !== "fake";
@@ -1195,11 +1225,12 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     list.innerHTML = state.rows.map(function(r){
       var head = '<div class="swaphead"><b>' + esc(r.name || "(품명 없음)") + '</b><span class="amt">' +
         won(r.qty) + ' × ' + won(discPrice(r)) + ' = ' + won(amount(r)) + '원</span></div>';
-      if(r.isDiscount) return '';   // 예약의 금액 할인은 바꾸지 않음 (외부용에서는 할인 한 줄에 합쳐짐)
-      if(isViewRow(r)) return '<div class="swapcard">' + head + '<div class="swaplock">관람은 바꿀 수 없습니다</div></div>';
+      if(r.isDiscount || isDiscRow(r)) return '';   // 할인 줄은 바꾸지 않음 (외부용에서는 할인 한 줄에 합쳐짐)
+      if(isViewRow(r)) return '<div class="swapcard" data-key="' + r.key + '">' + head + fakeQtyHTML(r) +
+        '<div class="swaplock">관람은 품목을 바꿀 수 없고, 외부용 수량(인원수)만 따로 정할 수 있습니다 (비우면 내부용과 같음 · 달라진 금액은 할인 줄에서 맞춤)</div></div>';
       var lines = state.swaps[r.key] || [];
       return '<div class="swapcard" data-key="' + r.key + '">' + head +
-        (lines.length ? lines.map(swapLineHTML).join("") : '<div class="swaplock">그대로 사용</div>') +
+        (lines.length ? lines.map(swapLineHTML).join("") : fakeQtyHTML(r) + '<div class="swaplock">품목은 그대로 사용</div>') +
         '<div><button class="btn small" type="button" data-sw="add">' + (lines.length ? '+ 품목 더하기' : '바꿀 품목 고르기') + '</button></div>' +
       '</div>';
     }).join("");
@@ -1392,6 +1423,16 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       renderFakePanel(); renderDoc();
     });
     list.addEventListener("input", function(e){
+      if(e.target.hasAttribute("data-fq")){
+        var cr = ctx(e.target).r; if(!cr) return;
+        state.fakeQty = state.fakeQty || {};
+        if(e.target.value === "") delete state.fakeQty[cr.key]; else state.fakeQty[cr.key] = Math.max(0, Math.floor(Number(e.target.value) || 0));
+        var fq = fakeQtyOf(cr), cp = Object.assign({}, cr, { qty: fq });
+        e.target.classList.toggle("fixed", fq != null);
+        e.target.closest(".fqline").querySelector(".lamt").textContent = fq != null ? won(fq) + ' × ' + won(discPrice(cr)) + ' = ' + won(amount(cp)) + '원' : '';
+        renderSwapSum(); renderDoc();
+        return;
+      }
       if(e.target.getAttribute("data-sw") !== "qty") return;
       var c = ctx(e.target), l = state.swaps[c.r.key][c.i];
       l.qty = e.target.value === "" ? 0 : Number(e.target.value);
@@ -2839,7 +2880,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var s = JSON.parse(JSON.stringify(h.snapshot));
     defaultState();
     Object.keys(s).forEach(function(k){ state[k] = s[k]; });
-    state.rows = state.rows || []; state.swaps = state.swaps || {};
+    state.rows = state.rows || []; state.swaps = state.swaps || {}; state.fakeQty = state.fakeQty || {};
     state.rows.forEach(function(r){ if(Number(r.key) >= uid) uid = Number(r.key) + 1; });
     editMode = "edit";
     setMailReady(false);
