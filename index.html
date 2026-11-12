@@ -2012,7 +2012,19 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       r.tRate = true;
       r.note = autoNote(r.rate);
     });
-    if(b.discount && !pct) warns.push('"' + b.product + '" 할인 ' + won(b.discount) + '원을 할인율로 바꿀 수 없습니다. 할인율을 직접 넣어 주세요.');
+    // %로 적용된 할인이 없는데 할인금액이 있으면(* 기타할인 - 400,000) 그 금액을 '할인' 한 줄로 넣는다
+    var applied = rows.reduce(function(s, r){ return s + (Number(r.price) || 0) * (Number(r.qty) || 0) - amount(r); }, 0);
+    if(b.discount && !applied && rows.length){
+      rows.forEach(function(r){ r.rate = 0; r.note = ""; });
+      var noteM = b.notes.map(function(s){ return s.replace(/\s*-\s*[\d,]+\s*\(.*$/, "").replace(/\s*-\s*[\d,]+\s*$/, "").trim(); }).filter(Boolean)[0];
+      var d = placeRow("etc_item", 1);
+      d.name = "할인"; d.tName = true;
+      d.price = -b.discount; d.rate = 0; d.tRate = true;
+      d.note = noteM || ""; d.tNote = true;
+      d.form = rows[0].form;   // 할인받은 품목과 같은 양식에
+      d.grp = d.key;
+      rows.push(d);
+    }
     return rows;
   }
 
