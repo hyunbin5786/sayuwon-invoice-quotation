@@ -227,7 +227,12 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable tr.canceled td:nth-child(n+3):nth-child(-n+7){text-decoration:line-through}
 .histtable .kind.void{border-color:var(--danger); color:var(--danger)}
 .histtable .kinds{display:flex; gap:4px; flex-wrap:wrap}
-.histtable .kind.gap{border-color:var(--steel); color:var(--steel); background:var(--steel-soft); cursor:help}
+.histtable .kind.gap{border-color:var(--steel); color:var(--steel); background:var(--steel-soft)}
+.histtable button.kind{font:inherit; font-size:11.5px; line-height:inherit; cursor:pointer; background:transparent}
+.histtable button.kind.gap{background:var(--steel-soft)}
+.histtable button.kind:hover{filter:brightness(.92); text-decoration:underline}
+.notebox{width:min(520px,100%)}
+.notetext{margin:0; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); font:inherit; font-size:13.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word; max-height:min(60vh,480px); overflow:auto}
 .taxwarn{color:var(--danger) !important}
 .histtable .versel{width:100%; font:inherit; font-size:12.5px; padding:2px 4px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--ink)}
 .histtable .cancelinfo{flex:1; min-width:0; font-size:11.5px; color:var(--danger); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; align-self:center}
@@ -580,6 +585,20 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         <button class="btn" type="button" id="gap-cancel">돌아가서 고치기</button>
         <button class="btn primary" type="button" id="gap-ok" disabled>사유 남기고 출력</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 발급 내역의 「발급 취소」 · 「차액」 배지를 누르면 사유 -->
+<div class="modal" id="note-modal" hidden style="z-index:60">
+  <div class="modalbox notebox" role="dialog" aria-modal="true" aria-labelledby="note-title">
+    <div class="modalhead">
+      <h2 id="note-title">사유</h2>
+      <button class="iconbtn" type="button" id="note-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="mailbody">
+      <div class="small" id="note-meta" style="color:var(--muted)"></div>
+      <pre class="notetext" id="note-text"></pre>
     </div>
   </div>
 </div>
@@ -2941,9 +2960,9 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       return '<tr data-id="' + esc(h.id) + '"' + (off ? ' class="canceled"' : h.pending ? ' class="pending"' : '') + '>' +
         '<td>' + when + (h.pending ? '<span class="sub">' + (histServer === false ? '이 브라우저에 보관' : '저장 중') + '</span>' : '') + '</td>' +
         '<td><div class="kinds"><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
-          (off ? '<span class="kind void">발급 취소</span>' : '') +
-          // 외부용 합계가 내부용과 달랐던 발급: 작은 배지, 마우스를 올리면 사유
-          (h.snapshot && h.snapshot.gapNote ? '<span class="kind gap" title="' + esc("외부용 금액이 내부용과 다름 · 사유: " + h.snapshot.gapNote) + '">차액</span>' : '') + '</div>' +
+          // 발급 취소 · 차액 배지는 버튼: 누르면 사유 창
+          (off ? '<button type="button" class="kind void" data-note="cancel" title="취소 사유 보기">발급 취소</button>' : '') +
+          (h.snapshot && h.snapshot.gapNote ? '<button type="button" class="kind gap" data-note="gap" title="외부용 금액 차이 사유 보기">차액</button>' : '') + '</div>' +
           (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') + '</td>' +
         '<td>' + esc(h.doc || "") + useTxt + '</td>' +
         '<td>' + esc(h.client || "") + '</td>' +
@@ -2999,6 +3018,24 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     paint(); status("");
     setEditOpen(false);
   }
+  // 「발급 취소」 · 「차액」 배지: 사유 창
+  var elNote = document.getElementById("note-modal");
+  function closeNote(){ elNote.hidden = true; }
+  document.getElementById("note-close").addEventListener("click", closeNote);
+  elNote.addEventListener("click", function(e){ if(e.target === elNote) closeNote(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !elNote.hidden){ e.stopPropagation(); closeNote(); } }, true);
+  document.getElementById("hist-body").addEventListener("click", function(e){
+    var nb = e.target.closest("[data-note]"); if(!nb) return;
+    var id = nb.closest("tr").getAttribute("data-id");
+    var h = allHistory().filter(function(x){ return x.id === id; })[0]; if(!h) return;
+    var gap = nb.getAttribute("data-note") === "gap";
+    document.getElementById("note-title").textContent = gap ? "외부용 금액 차이 사유" : "발급 취소 사유";
+    document.getElementById("note-meta").textContent = histLabel(h) + (gap ? "" : " · 취소 " + fmtAt(h.canceled));
+    var txt = gap ? (h.snapshot && h.snapshot.gapNote) : h.cancelNote;
+    document.getElementById("note-text").textContent = txt || "적힌 사유가 없습니다.";
+    elNote.hidden = false;
+    document.getElementById("note-close").focus();
+  });
   document.getElementById("hist-body").addEventListener("click", function(e){
     var b = e.target.closest("[data-h]"); if(!b) return;
     var id = b.closest("tr").getAttribute("data-id"), act = b.getAttribute("data-h");
