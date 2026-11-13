@@ -2970,9 +2970,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         '<td class="num">' + won(h.total) + '원</td>' +
         '<td>' + esc(h.sender || "") + '</td>' +
         '<td><div class="acts">' + (off
-          // 취소한 줄: 취소 일시 · 사유를 버튼 왼쪽에 한 줄로 (길면 말줄임, 마우스를 올리면 전체)
-          ? '<span class="cancelinfo" title="' + esc("발급 취소 " + fmtAt(h.canceled) + (h.cancelNote ? " · " + h.cancelNote : "")) + '">취소 ' +
-              esc(fmtAt(h.canceled).slice(5)) + (h.cancelNote ? ' · ' + esc(h.cancelNote) : '') + '</span>' +
+          // 취소한 줄: 버튼 왼쪽에 취소 일시만 (사유는 구분 칸의 「발급 취소」 버튼을 누르면 창으로)
+          ? '<span class="cancelinfo">취소 ' + esc(fmtAt(h.canceled).slice(5)) + '</span>' +
             '<button class="btn small" type="button" data-h="uncancel">취소 철회</button>'
           : (h.snapshot ? '<button class="btn small" type="button" data-h="reissue">재발행</button><button class="btn small" type="button" data-h="revise">수정발행</button>' : '') +
             '<button class="btn small danger" type="button" data-h="cancel">발급 취소</button>') + '</div></td>' +
