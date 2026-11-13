@@ -228,6 +228,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable .kind.void{border-color:var(--danger); color:var(--danger)}
 .histtable .kinds{display:flex; gap:4px; flex-wrap:wrap}
 .histtable .gapnote{color:var(--danger); cursor:help}
+.taxwarn{color:var(--danger) !important}
 .histtable .versel{width:100%; font:inherit; font-size:12.5px; padding:2px 4px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--ink)}
 .histtable .cancelinfo{flex:1; min-width:0; font-size:11.5px; color:var(--danger); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; align-self:center}
 .histtable tr.canceled .acts .btn{color:var(--ink)}
@@ -600,8 +601,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       <table class="cattable">
         <thead><tr>
           <th style="width:34px;text-align:center"><input type="checkbox" id="cat-selall" aria-label="보이는 품목 전체 선택"></th>
-          <th style="width:27%">예약 상품명</th><th style="width:20%">견적서 품명</th><th style="width:11%">구분</th>
-          <th style="width:11%">발급</th><th style="width:13%">정상가</th><th style="width:9%">할인 대상</th><th style="width:64px"></th>
+          <th style="width:23%">예약 상품명</th><th style="width:16%">견적서 품명</th><th style="width:10%">구분</th>
+          <th style="width:10%">발급</th><th style="width:11%">정상가</th><th style="width:10%" title="정상가 중 과세 금액 (나눠 적는 품목만)">과세</th><th style="width:10%" title="정상가 중 비과세 금액 (나눠 적는 품목만)">비과세</th><th style="width:7%">할인 대상</th><th style="width:64px"></th>
         </tr></thead>
         <tbody id="cat-body"></tbody>
       </table>
@@ -827,6 +828,11 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   }
 
   var CATALOG = [];
+  // 정상가를 과세 · 비과세로 나눠 적는 품목: [과세, 비과세]
+  var TAX_SPLIT = {
+    "사유원 새벽 해오름 산책(평일)": [70000, 50000],
+    "사유원 새벽 해오름 산책(주말)": [70000, 69000]
+  };
   function buildCatalog(){
     var seen = {}, list = [], edits = catEdits.edits || {};
     CATALOG_RAW.forEach(function(line){
@@ -837,6 +843,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       it.src = src; it.def = true; it.id = "c:" + src;
       it.price = c[1] ? Number(c[1]) : null;
       it.disc = c[2] === "1";
+      if(TAX_SPLIT[src]){ it.taxable = TAX_SPLIT[src][0]; it.taxfree = TAX_SPLIT[src][1]; }   // 기본 과세 · 비과세 (품목 관리에서 바꾼 값이 우선)
       var base = it.name;
       if(edits[src]) Object.assign(it, edits[src]);
       if(MABANG[src] && it.kind === "food") it.kind = "mabang";   // 예전에 '식사'로 바꿔 둔 기본 몽몽마방 메뉴 (사유의 밥상)
@@ -2409,6 +2416,11 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     } else setCat(id, "hidden", true);
   }
 
+  function taxSplitNote(it){
+    if(it.taxable == null && it.taxfree == null) return "";
+    var s = (Number(it.taxable) || 0) + (Number(it.taxfree) || 0);
+    return s === (Number(it.price) || 0) ? "" : '<span class="sub taxwarn">합 ' + won(s) + '원 ≠ 정상가</span>';
+  }
   function catRowHTML(it){
     var u = it.kind === "package" ? unitPrice(it) : null;
     var fixedForm = it.kind === "view" || it.kind === "package";
@@ -2425,6 +2437,10 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       '<td>' + kindSel + '</td>' +
       '<td>' + formSel + '</td>' +
       '<td><input class="num" type="number" min="0" step="100" data-f="price" value="' + (it.price == null ? "" : it.price) + '"></td>' +
+      // 과세 · 비과세: 정상가를 나눠 적는 품목만 (예: 새벽 해오름 산책). 합이 정상가와 다르면 알림
+      ['taxable','taxfree'].map(function(f){
+        return '<td><input class="num" type="number" min="0" step="100" data-f="' + f + '" value="' + (it[f] == null ? "" : it[f]) + '"></td>';
+      }).join("").replace(/<\/td>$/, taxSplitNote(it) + '</td>') +
       '<td style="text-align:center"><input type="checkbox" data-f="disc"' + (it.disc ? ' checked' : '') + '></td>' +
       '<td><button class="btn small danger" type="button" data-act="del">삭제</button></td>' +
     '</tr>';
@@ -2456,7 +2472,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       return (ea - eb) || byKind(a, b);
     });
     document.getElementById("cat-body").innerHTML = items.map(catRowHTML).join("") ||
-      '<tr><td colspan="8" style="padding:18px;text-align:center;color:var(--muted)">찾는 품목이 없습니다.</td></tr>';
+      '<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--muted)">찾는 품목이 없습니다.</td></tr>';
     document.getElementById("cat-count").textContent = "· " + CATALOG.filter(function(it){ return !it.sys && !it.hidden; }).length + "개";
     syncPicks();
   }
@@ -2465,8 +2481,15 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var el = e.target, f = el.getAttribute("data-f"), tr = el.closest("tr");
     if(!f || !tr) return;
     var id = tr.getAttribute("data-id");
-    var v = f === "disc" ? el.checked : f === "price" ? (el.value === "" ? null : Number(el.value)) : el.value;
+    var num = f === "price" || f === "taxable" || f === "taxfree";
+    var v = f === "disc" ? el.checked : num ? (el.value === "" ? null : Number(el.value)) : el.value;
     setCat(id, f, v);
+    // 과세 + 비과세 합이 정상가와 다르면 알림
+    if(num){
+      var cell = tr.querySelector('[data-f="taxfree"]').parentNode, old = cell.querySelector(".taxwarn");
+      if(old) old.remove();
+      cell.insertAdjacentHTML("beforeend", taxSplitNote(product(id)));
+    }
     // 구분·정상가가 바뀌면 발급 칸과 식사 단가 표시를 다시 그린다
     if(f === "kind" || (f === "price" && product(id).kind === "package")){
       var it = product(id);
