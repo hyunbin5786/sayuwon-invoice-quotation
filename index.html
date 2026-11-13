@@ -981,8 +981,26 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   function amount(r){ return discPrice(r) * (Number(r.qty) || 0); }
   // 할인 줄(외부용 할인 · 금액 할인 · 음수 금액)은 양식마다 무조건 맨 아래로
   function isDiscRow(r){ return !!(r.adj || r.isDiscount || (Number(r.price) || 0) < 0); }
+  // 과세 · 비과세가 나뉜 품목(품목 관리의 과세 · 비과세 칸, 예: 새벽 해오름 산책)은 문서에서 두 줄로 나눈다.
+  // 현장 결제: 비과세분은 사유원 양식(면세), 과세분은 신라철강 양식(VAT). 인터넷 결제: 사유원 양식에 (비과세) · (과세) 두 줄 → VAT 포함
+  // 단가가 품목 관리 정상가와 다르면 같은 비율로 나눈다
+  function expandRow(r){
+    if(!r || r.adj || r.isDiscount || !r.pid) return [r];
+    var p = product(r.pid), tx = Number(p.taxable), tf = Number(p.taxfree), price = Number(r.price) || 0;
+    if(p.id !== r.pid || !(tx > 0) || !(tf > 0) || price <= 0) return [r];
+    var free = Math.round(price * tf / (tx + tf)), online = state.payMode === "online";
+    return [
+      Object.assign({}, r, { price: free, form: "sayuwon", name: (r.name || "") + (online ? " (비과세)" : ""), split: "free" }),
+      Object.assign({}, r, { price: price - free, form: "shilla", name: (r.name || "") + (online ? " (과세)" : ""), split: "tax" })
+    ];
+  }
+  // 한 줄의 금액이 양식별로 얼마씩 들어가는지 (외부용 할인 계산용)
+  function addDiff(diff, r, sign){
+    expandRow(r).forEach(function(x){ diff[formOf(x)] += sign * amount(x); });
+  }
   function rowsOf(form){
-    var list = state.rows.filter(function(r){ return formOf(r) === form; });
+    var list = [];
+    state.rows.forEach(function(r){ expandRow(r).forEach(function(x){ if(formOf(x) === form) list.push(x); }); });
     return list.filter(function(r){ return !isDiscRow(r); }).concat(list.filter(isDiscRow));
   }
   function totalOf(form){
@@ -1127,20 +1145,20 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       if(isViewRow(r) || !lines || !lines.length){
         var cp = Object.assign({}, r), fq = fakeQtyOf(r);
         // 외부용에서만 수량(인원수)을 바꿨으면, 달라진 금액은 할인 한 줄에서 맞춘다
-        if(fq != null){ cp.qty = fq; diff[formOf(r)] += amount(cp) - amount(r); }
+        if(fq != null){ cp.qty = fq; addDiff(diff, cp, 1); addDiff(diff, r, -1); }
         // 할인 없는 기존 품목은 바꾼 품목과 합칠 수 있도록 복사해서 넣는다
         if(!isViewRow(r) && !Number(r.rate) && r.pid && r.pid.indexOf("etc_") !== 0) pushMerged(cp);
         else out.push(Object.assign(cp, { ok: "r:" + r.key }));
         return;
       }
-      var f = formOf(r);
       lines.forEach(function(l, i){
         var p = product(l.pid);
-        pushMerged({ key: r.key + "-" + i, pid: p.id, name: p.name, qty: Number(l.qty) || 0, price: Number(p.price) || 0,
-                     rate: 0, note: "", form: r.form, disc: false });
-        diff[f] += swapLineAmount(l);
+        var nr = { key: r.key + "-" + i, pid: p.id, name: p.name, qty: Number(l.qty) || 0, price: Number(p.price) || 0,
+                   rate: 0, note: "", form: r.form, disc: false };
+        addDiff(diff, nr, 1);   // 과세 · 비과세로 나뉘는 품목은 양식별로 나눠 셈
+        pushMerged(nr);
       });
-      diff[f] -= amount(r);
+      addDiff(diff, r, -1);
     });
     // 사용자가 정한 외부용 순서대로 (새로 생긴 줄은 그 양식 맨 뒤에)
     var ord = state.fakeOrder || [];
@@ -1356,7 +1374,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   function saveRealOrder(box){
     var keys = boxKeys(box), byKey = {};
     state.rows.forEach(function(r){ byKey[String(r.key)] = r; });
-    var moved = keys.map(function(k){ return byKey[k]; }).filter(Boolean);
+    var moved = keys.map(function(k){ return byKey[k]; }).filter(function(r, i, a){ return r && a.indexOf(r) === i; });   // 과세 · 비과세로 나뉜 품목은 같은 열쇠가 두 번
     state.rows = moved.concat(state.rows.filter(function(r){ return moved.indexOf(r) < 0; }));   // 할인 줄 등 목록에 없는 줄은 뒤에
     renderRows(); renderDoc();
   }
