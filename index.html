@@ -227,7 +227,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable tr.canceled td:nth-child(n+3):nth-child(-n+7){text-decoration:line-through}
 .histtable .kind.void{border-color:var(--danger); color:var(--danger)}
 .histtable .kinds{display:flex; gap:4px; flex-wrap:wrap}
-.histtable .gapnote{color:var(--danger); cursor:help}
+.histtable .kind.gap{border-color:var(--steel); color:var(--steel); background:var(--steel-soft); cursor:help}
 .taxwarn{color:var(--danger) !important}
 .histtable .versel{width:100%; font:inherit; font-size:12.5px; padding:2px 4px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--ink)}
 .histtable .cancelinfo{flex:1; min-width:0; font-size:11.5px; color:var(--danger); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; align-self:center}
@@ -2941,13 +2941,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       return '<tr data-id="' + esc(h.id) + '"' + (off ? ' class="canceled"' : h.pending ? ' class="pending"' : '') + '>' +
         '<td>' + when + (h.pending ? '<span class="sub">' + (histServer === false ? '이 브라우저에 보관' : '저장 중') + '</span>' : '') + '</td>' +
         '<td><div class="kinds"><span class="kind' + (h.kind === "revise" ? " revise" : "") + '">' + kind + '</span>' +
-          (off ? '<span class="kind void">발급 취소</span>' : '') + '</div>' +
+          (off ? '<span class="kind void">발급 취소</span>' : '') +
+          // 외부용 합계가 내부용과 달랐던 발급: 작은 배지, 마우스를 올리면 사유
+          (h.snapshot && h.snapshot.gapNote ? '<span class="kind gap" title="' + esc("외부용 금액이 내부용과 다름 · 사유: " + h.snapshot.gapNote) + '">차액</span>' : '') + '</div>' +
           (h.parent ? '<span class="sub">원본 ' + esc(par ? fmtAt(par.at) : "") + '</span>' : '') + '</td>' +
         '<td>' + esc(h.doc || "") + useTxt + '</td>' +
         '<td>' + esc(h.client || "") + '</td>' +
         '<td>' + esc(fmtDate(dateOnly(h.snapshot && h.snapshot.useDate || h.useDate), true)) + '</td>' +
-        '<td class="num">' + won(h.total) + '원' + (h.snapshot && h.snapshot.gapNote
-          ? '<span class="sub gapnote" title="' + esc("외부용 금액 차이 사유: " + h.snapshot.gapNote) + '">외부용 금액 다름 · 사유 있음</span>' : '') + '</td>' +
+        '<td class="num">' + won(h.total) + '원</td>' +
         '<td>' + esc(h.sender || "") + '</td>' +
         '<td><div class="acts">' + (off
           // 취소한 줄: 취소 일시 · 사유를 버튼 왼쪽에 한 줄로 (길면 말줄임, 마우스를 올리면 전체)
