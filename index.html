@@ -987,7 +987,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   function expandRow(r){
     if(!r || r.adj || r.isDiscount || !r.pid) return [r];
     var p = product(r.pid), tx = Number(p.taxable), tf = Number(p.taxfree), price = Number(r.price) || 0;
-    if(p.id !== r.pid || !(tx > 0) || !(tf > 0) || price <= 0) return [r];
+    // 관람+식사는 이미 관람 줄 · 식사 줄로 나뉘어 들어가므로(식사 단가) 다시 나누지 않는다
+    if(p.id !== r.pid || p.kind === "package" || p.kind === "view" || !(tx > 0) || !(tf > 0) || price <= 0) return [r];
     var free = Math.round(price * tf / (tx + tf)), online = state.payMode === "online";
     return [
       Object.assign({}, r, { price: free, form: "sayuwon", name: (r.name || "") + (online ? " (비과세)" : ""), split: "free" }),
