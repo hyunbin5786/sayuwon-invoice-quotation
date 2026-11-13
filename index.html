@@ -1000,27 +1000,48 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
   function amount(r){ return discPrice(r) * (Number(r.qty) || 0); }
   // 할인 줄(외부용 할인 · 금액 할인 · 음수 금액)은 양식마다 무조건 맨 아래로
   function isDiscRow(r){ return !!(r.adj || r.isDiscount || (Number(r.price) || 0) < 0); }
-  // 과세 · 비과세가 나뉜 품목(품목 관리의 과세 · 비과세 칸, 예: 새벽 해오름 산책)은 문서에서 두 줄로 나눈다.
-  // 현장 결제: 비과세분은 사유원 양식(면세), 과세분은 신라철강 양식(VAT). 인터넷 결제: 사유원 양식에 (비과세) · (과세) 두 줄 → VAT 포함
+  // 과세 · 비과세가 나뉜 품목(품목 관리의 과세 · 비과세 칸, 예: 새벽 해오름 산책)은 문서에서 나눈다.
+  // 비과세분 = 관람: 같은 날(평일/주말) '관람' 줄의 인원에 더한다 (사유원 양식, 면세)
+  // 과세분: 원래 품명 그대로 한 줄 (현장 결제면 신라철강 양식 · VAT, 인터넷 결제면 사유원 양식)
   // 단가가 품목 관리 정상가와 다르면 같은 비율로 나눈다
   function expandRow(r){
     if(!r || r.adj || r.isDiscount || !r.pid) return [r];
     var p = product(r.pid), tx = Number(p.taxable), tf = Number(p.taxfree), price = Number(r.price) || 0;
     // 관람+식사는 이미 관람 줄 · 식사 줄로 나뉘어 들어가므로(식사 단가) 다시 나누지 않는다
     if(p.id !== r.pid || p.kind === "package" || p.kind === "view" || !(tx > 0) || !(tf > 0) || price <= 0) return [r];
-    var free = Math.round(price * tf / (tx + tf)), online = state.payMode === "online";
+    var free = Math.round(price * tf / (tx + tf));
     return [
-      Object.assign({}, r, { price: free, form: "sayuwon", name: (r.name || "") + (online ? " (비과세)" : ""), split: "free" }),
-      Object.assign({}, r, { price: price - free, form: "shilla", name: (r.name || "") + (online ? " (과세)" : ""), split: "tax" })
+      Object.assign({}, r, { price: free, form: "sayuwon", split: "free", weekend: /주말|공휴일/.test(p.src || r.name || "") }),
+      Object.assign({}, r, { price: price - free, form: "shilla", split: "tax" })
     ];
   }
   // 한 줄의 금액이 양식별로 얼마씩 들어가는지 (외부용 할인 계산용)
   function addDiff(diff, r, sign){
     expandRow(r).forEach(function(x){ diff[formOf(x)] += sign * amount(x); });
   }
+  // 문서에 들어갈 전체 줄: 나뉜 품목의 비과세분은 같은 관람 줄 인원에 합친다
+  function docRows(){
+    var out = [], frees = [];
+    state.rows.forEach(function(r){ expandRow(r).forEach(function(x){ (x.split === "free" ? frees : out).push(x); }); });
+    frees.forEach(function(f){
+      var name = f.weekend ? "주말 관람" : "평일 관람", qty = Number(f.qty) || 0;
+      function sameView(x){ return x && !x.adj && !x.isDiscount && isViewRow(x) && formOf(x) === formOf(f) && x.name === name; }
+      // 단가 · 할인율까지 같은 관람 줄이 있으면 그 인원에 더한다
+      var i = -1;
+      out.forEach(function(x, k){ if(i < 0 && sameView(x) && Number(x.price) === Number(f.price) && (Number(x.rate) || 0) === (Number(f.rate) || 0)) i = k; });
+      if(i >= 0){ out[i] = Object.assign({}, out[i], { qty: (Number(out[i].qty) || 0) + qty }); return; }
+      // 없으면(할인율이 다르거나 관람 줄이 없음) 관람 줄을 하나 만들어 관람 줄들 바로 뒤에
+      var at = -1; out.forEach(function(x, k){ if(sameView(x)) at = k; });
+      // 품목은 같은 관람 줄과 같게(품명 칸이 합쳐지도록), 없으면 같은 이름 · 가격의 관람 품목
+      var vp = at >= 0 ? out[at].pid : (CATALOG.filter(function(c){ return c.kind === "view" && !c.hidden && c.name === name && Number(c.price) === Number(f.price); })[0] || {}).id;
+      var nr = Object.assign({}, f, { pid: vp || f.pid, name: name, note: Number(f.rate) ? f.note : "" });
+      if(at < 0) out.forEach(function(x, k){ if(x && isViewRow(x) && formOf(x) === formOf(f)) at = k; });
+      out.splice(at + 1, 0, nr);
+    });
+    return out;
+  }
   function rowsOf(form){
-    var list = [];
-    state.rows.forEach(function(r){ expandRow(r).forEach(function(x){ if(formOf(x) === form) list.push(x); }); });
+    var list = docRows().filter(function(x){ return formOf(x) === form; });
     return list.filter(function(r){ return !isDiscRow(r); }).concat(list.filter(isDiscRow));
   }
   function totalOf(form){
