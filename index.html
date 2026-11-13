@@ -208,6 +208,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .cattable .sub{display:block; font-size:11px; color:var(--faint); margin-top:2px}
 .btn.small{padding:4px 8px; font-size:12px; white-space:nowrap}
 .mailbox{width:min(620px,100%)}
+.gapbox{width:min(520px,100%)}
+.gaplist{display:flex; flex-direction:column; gap:6px; padding:10px 12px; border:1px solid var(--danger); border-radius:8px; font-size:13px; font-variant-numeric:tabular-nums}
+.gaplist .gl{display:flex; justify-content:space-between; gap:10px}
+.gaplist .gl b{color:var(--danger)}
+.gapacts{display:flex; justify-content:flex-end; gap:8px}
 .histtable{min-width:1140px}
 /* 발급 내역 창: 높이는 최대 720px(화면이 작으면 화면 높이 - 32px), 넘치는 내역은 표 안에서 스크롤 · 머리줄 고정 */
 #history-modal .modalbox{width:min(1320px,100%); max-height:min(720px, calc(100vh - 32px))}
@@ -222,6 +227,7 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .histtable tr.canceled td:nth-child(n+3):nth-child(-n+7){text-decoration:line-through}
 .histtable .kind.void{border-color:var(--danger); color:var(--danger)}
 .histtable .kinds{display:flex; gap:4px; flex-wrap:wrap}
+.histtable .gapnote{color:var(--danger); cursor:help}
 .histtable .versel{width:100%; font:inherit; font-size:12.5px; padding:2px 4px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); color:var(--ink)}
 .histtable .cancelinfo{flex:1; min-width:0; font-size:11.5px; color:var(--danger); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; align-self:center}
 .histtable tr.canceled .acts .btn{color:var(--ink)}
@@ -551,6 +557,28 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         <textarea id="mail-text" rows="7"></textarea>
       </div>
       <div class="status" id="mail-status" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 외부용 합계가 내부용보다 적을 때: 확인 + 사유를 적어야 출력 -->
+<div class="modal" id="gap-modal" hidden>
+  <div class="modalbox gapbox" role="dialog" aria-modal="true" aria-labelledby="gap-title">
+    <div class="modalhead">
+      <h2 id="gap-title">외부용 금액이 내부용과 다릅니다</h2>
+      <button class="iconbtn" type="button" id="gap-close" aria-label="닫기">✕</button>
+    </div>
+    <div class="mailbody">
+      <div id="gap-list" class="gaplist"></div>
+      <p class="cathint" style="margin:0">외부용 합계가 내부용보다 적습니다. 이대로 출력하려면 <b>사유</b>를 적어 주세요. 사유는 발급 내역에 함께 남습니다.</p>
+      <div class="field">
+        <label for="gap-note">사유 (필수)</label>
+        <textarea id="gap-note" rows="3" placeholder="예: 기관 예산 한도에 맞춰 외부용 금액을 낮춰 달라는 요청"></textarea>
+      </div>
+      <div class="gapacts">
+        <button class="btn" type="button" id="gap-cancel">돌아가서 고치기</button>
+        <button class="btn primary" type="button" id="gap-ok" disabled>사유 남기고 출력</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1263,7 +1291,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         return '<div class="line"><span>' + COMPANY[f].name + ' 외부용</span><span>' + won(t) + '원</span></div>' +
           '<div class="line small"><span>└ ' + (adj ? '할인 ' + won(-amount(adj)) + '원으로 맞춤' : ok ? (formSwapCount[f] ? '할인 없이 맞음' : '바꾼 품목 없음') : '') + '</span>' +
           '<span class="small" style="color:' + (ok ? 'var(--accent)' : 'var(--danger)') + '">' +
-          (ok ? '내부용 ' + won(real[f]) + '원과 같음' : '내부용보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘리거나 품목을 더해 주세요') + '</span></div>' +
+          (ok ? '내부용 ' + won(real[f]) + '원과 같음' : '내부용보다 ' + won(real[f] - t) + '원 적음 · 수량을 늘리거나 품목을 더해 주세요 (그대로 내려면 출력할 때 사유 입력)') + '</span></div>' +
           sugg[f];
       }).join("");
     });
@@ -1761,8 +1789,36 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     if(!state.useDateText.trim() && !state.useDate) return "이용일을 입력해 주세요.";
     if(!issueDate()) return "발행일을 입력해 주세요.";
     if(state.docType === "quote" && state.useDate && state.quoteDate > state.useDate) return "발행일이 이용일보다 늦습니다. 이용일 이후 요청이면 발행일을 이용일과 같게 맞춰 주세요.";
-    if(kind === "fake" && fakeShort().length) return "외부용 금액이 내부용보다 적습니다. 바꾼 품목의 수량을 늘리거나 품목을 더해 주세요.";
-    return null;
+    return null;   // 외부용이 내부용보다 적은 경우는 출력할 때 사유를 받고 허용 (askGapReason)
+  }
+
+  // 외부용 합계가 내부용보다 적을 때: 팝업으로 확인하고 사유를 적어야 출력. 취소하면 null
+  var elGap = document.getElementById("gap-modal");
+  function askGapReason(short){
+    var real = { sayuwon: totalOf("sayuwon"), shilla: totalOf("shilla") };
+    document.getElementById("gap-list").innerHTML = short.map(function(s){
+      return '<div class="gl"><span>' + esc(COMPANY[s.form].name) + '</span><span>내부용 ' + won(real[s.form]) + '원 · 외부용 ' +
+        won(real[s.form] - s.gap) + '원 · <b>' + won(s.gap) + '원 적음</b></span></div>';
+    }).join("");
+    var note = document.getElementById("gap-note"), ok = document.getElementById("gap-ok");
+    note.value = state.gapNote || "";   // 재발행 · 수정발행이면 지난번 사유를 채워 둔다
+    ok.disabled = !note.value.trim();
+    elGap.hidden = false; note.focus();
+    return new Promise(function(done){
+      function finish(v){
+        elGap.hidden = true;
+        note.oninput = ok.onclick = elGap.onclick = null;
+        document.getElementById("gap-cancel").onclick = document.getElementById("gap-close").onclick = null;
+        document.removeEventListener("keydown", esc_);
+        done(v);
+      }
+      function esc_(e){ if(e.key === "Escape") finish(null); }
+      note.oninput = function(){ ok.disabled = !note.value.trim(); };
+      ok.onclick = function(){ if(note.value.trim()) finish(note.value.trim()); };
+      document.getElementById("gap-cancel").onclick = document.getElementById("gap-close").onclick = function(){ finish(null); };
+      elGap.onclick = function(e){ if(e.target === elGap) finish(null); };
+      document.addEventListener("keydown", esc_);
+    });
   }
 
   // 일반 브라우저(GitHub Pages)에서 파일 내려받기
@@ -1826,6 +1882,15 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     var bad = validate(fake ? "fake" : "real");
     if(bad){ status(bad, "err"); return; }
     if(!window.html2canvas || !window.jspdf){ status("PDF 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.", "err"); return; }
+    // 외부용이 내부용보다 적으면 확인 팝업에서 사유를 받아야 출력 (사유는 발급 내역 스냅샷에 남음)
+    var short = fake ? fakeShort() : [];
+    if(short.length){
+      busy = true;
+      var why = await askGapReason(short);
+      busy = false;
+      if(why === null){ status("출력을 취소했습니다. 외부용 금액을 고치거나, 다시 출력해 사유를 적어 주세요."); return; }
+      state.gapNote = why;
+    } else delete state.gapNote;
 
     var variants = fake ? [{ rows: state.rows, tag: "내부용" }, { rows: fakeRows(), tag: "외부용" }] : [{ rows: state.rows, tag: "" }];
     variants.forEach(function(v){
@@ -2839,7 +2904,8 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         '<td>' + esc(h.doc || "") + useTxt + '</td>' +
         '<td>' + esc(h.client || "") + '</td>' +
         '<td>' + esc(fmtDate(dateOnly(h.snapshot && h.snapshot.useDate || h.useDate), true)) + '</td>' +
-        '<td class="num">' + won(h.total) + '원</td>' +
+        '<td class="num">' + won(h.total) + '원' + (h.snapshot && h.snapshot.gapNote
+          ? '<span class="sub gapnote" title="' + esc("외부용 금액 차이 사유: " + h.snapshot.gapNote) + '">외부용 금액 다름 · 사유 있음</span>' : '') + '</td>' +
         '<td>' + esc(h.sender || "") + '</td>' +
         '<td><div class="acts">' + (off
           // 취소한 줄: 취소 일시 · 사유를 버튼 왼쪽에 한 줄로 (길면 말줄임, 마우스를 올리면 전체)
@@ -2963,6 +3029,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         { header:"상태", key:"state", width:9 },
         { header:"취소 일시", key:"canceled", width:17 },
         { header:"취소 사유", key:"cancelNote", width:24 },
+        { header:"외부용 금액 차이 사유", key:"gapNote", width:30 },
         { header:"품목", key:"items", width:48 },
         { header:"파일", key:"files", width:48 }
       ];
@@ -2978,7 +3045,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
           issueDate: fmtDate(dateOnly(h.issueDate), true),
           total: Number(h.total) || 0, sender: h.sender || "",
           state: h.canceled ? "발급 취소" : "정상",
-          canceled: h.canceled ? fmtAt(h.canceled) : "", cancelNote: h.cancelNote || "",
+          canceled: h.canceled ? fmtAt(h.canceled) : "", cancelNote: h.cancelNote || "", gapNote: s.gapNote || "",
           items: histItems(h), files: (h.files || []).join(", ")
         });
         row.getCell("total").numFmt = "#,##0";
@@ -2987,7 +3054,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       var head = ws.getRow(1);
       head.font = { bold:true }; head.alignment = { vertical:"middle", horizontal:"center" }; head.height = 22;
       head.eachCell(function(c){ c.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFEFEFEF" } }; c.border = { bottom:{ style:"thin" } }; });
-      ws.autoFilter = { from:"A1", to:"Q1" };
+      ws.autoFilter = { from:"A1", to:"R1" };
       ws.eachRow(function(r, i){ if(i > 1) r.alignment = { vertical:"top", wrapText:true }; });
 
       var buf = await wb.xlsx.writeBuffer();
