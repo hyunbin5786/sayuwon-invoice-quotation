@@ -803,12 +803,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     if(syncState === "saving") return "공유 목록에 저장 중…";
     if(syncState === "error") return "저장하지 못했습니다. 인터넷 연결을 확인하고 「저장」을 다시 눌러 주세요.";
     if(syncState === "saved") return "저장했습니다. 모두에게 반영됩니다.";
-    if(catDirty()) return "저장하지 않은 변경이 있습니다 · 「저장」을 눌러야 모두에게 반영됩니다.";
-    return "공유 목록입니다. 고친 뒤 「저장」을 누르면 모두에게 반영됩니다.";
+    if(catDirty()) return "고친 내용을 곧 자동으로 저장합니다 (2초 뒤) · 바로 저장하려면 「저장」";
+    return "공유 목록입니다. 고치면 자동으로 저장되어 모두에게 반영됩니다.";
   }
+  var autoSaveT = null;
   function queueOp(op){
     if(!SHARED_URL) return;
     syncQ.push(op); setSync("dirty");
+    clearTimeout(autoSaveT); autoSaveT = setTimeout(flushOps, 2000);   // 자동 저장: 마지막으로 고치고 2초 뒤 (「저장」을 눌러도 바로 저장)
   }
   function applyShared(data){
     catEdits = data || {}; saveCatEdits(); buildCatalog();
@@ -823,7 +825,9 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     setSync("");
   }
   function flushOps(){
-    if(syncBusy || !syncQ.length) return;
+    clearTimeout(autoSaveT);
+    if(syncBusy){ if(syncQ.length) autoSaveT = setTimeout(flushOps, 1500); return; }   // 저장 중이면 끝난 뒤 이어서
+    if(!syncQ.length) return;
     var ops = syncQ; syncQ = []; syncBusy = true;
     fetch(SHARED_URL, { method:"POST", body: JSON.stringify({ ops: ops }) })
       .then(function(r){ return r.json(); })
@@ -831,11 +835,11 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
         syncBusy = false;
         if(res && res.ok === false) throw new Error(res.error || "save failed");
         if(ops.some(function(o){ return o.op === "replace"; })){ try { localStorage.removeItem(CAT_KEY); } catch(e){} legacyEdits = {}; }
-        if(syncQ.length){ savedEdits = JSON.parse(JSON.stringify(res.data || {})); setSync("dirty"); return; }   // 저장 중에 또 고친 것은 남겨 둔다
+        if(syncQ.length){ savedEdits = JSON.parse(JSON.stringify(res.data || {})); setSync("dirty"); autoSaveT = setTimeout(flushOps, 1500); if(CAT_ONLY) tellParent("saved"); return; }   // 저장 중에 또 고친 것은 이어서 저장
         applyShared(res.data); setSync("saved");
         if(CAT_ONLY) tellParent("saved");   // 도우미가 가격 · 메뉴를 다시 불러오게
       })
-      .catch(function(){ syncBusy = false; syncQ = ops.concat(syncQ); setSync("error"); });
+      .catch(function(){ syncBusy = false; syncQ = ops.concat(syncQ); setSync("error"); clearTimeout(autoSaveT); autoSaveT = setTimeout(flushOps, 15000); });   // 연결이 안 되면 15초 뒤 다시
     setSync("saving");
   }
   function pullShared(){
@@ -2625,11 +2629,12 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     document.getElementById("cat-upload").hidden = true;
   });
   function closeCatalog(){
-    if(catDirty() && !syncBusy){
-      if(confirm("저장하지 않은 변경이 있습니다.\n[확인] 저장하고 닫기 / [취소] 저장하지 않고 닫기")) flushOps();
-      else discardCatEdits();
+    if(syncQ.length) flushOps();   // 자동 저장: 닫을 때 남은 변경도 저장 (묻지 않음)
+    if(CAT_ONLY){   // 단체예약 도우미 안에서 연 품목 관리: 저장이 끝난 뒤 닫기 (도우미가 창을 비우면 저장이 끊기므로)
+      var t0 = Date.now();
+      (function wait(){ if((!syncBusy && !syncQ.length) || Date.now() - t0 > 10000) tellParent("close"); else setTimeout(wait, 200); })();
+      return;
     }
-    if(CAT_ONLY){ tellParent("close"); return; }   // 단체예약 도우미 안에서 연 품목 관리: 닫기는 도우미 창이 함
     elCat.hidden = true; renderRows(); renderDoc();
   }
   // ?catalog=1 : 단체예약 도우미가 품목 관리 창만 띄워 쓰는 모드 (같은 공유 목록)
