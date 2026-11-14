@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>사유원 견적서&amp;거래명세서 발행기</title>
+<script>/* 사유원 예약 관리 시스템: 로그인(이름 + 사번)을 안 했으면 첫 화면으로 (온라인에서만, 품목 관리 창으로 띄운 경우는 그대로) */ (function(){ try{ if(!/github\.io$/.test(location.hostname) || /[?&]catalog=1/.test(location.search)) return; var u=JSON.parse(localStorage.getItem("sy_user")||"null"); if(!u || !u.name || !u.emp) location.replace("https://hyunbin5786.github.io/sayuwon-sales/"); }catch(e){} })();</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;700&display=swap">
 <style>
 :root{
@@ -43,6 +44,7 @@ button,input,select,textarea{font:inherit; color:inherit}
 .wrap{max-width:1480px; margin:0 auto; padding-left:16px; padding-right:16px; padding-block:22px 48px}
 
 header.top{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:20px}
+.menu-link{display:inline-block; margin-bottom:8px; text-decoration:none; font-weight:700}
 .brand{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
 .brand h1{
   font-family:'Noto Serif KR', serif; font-weight:700; font-size:25px; margin:0;
@@ -341,6 +343,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
 <div class="wrap">
   <header class="top">
     <div class="brand">
+      <a class="btn menu-link" id="sys-menu" href="https://hyunbin5786.github.io/sayuwon-sales/" title="사유원 예약 관리 시스템 메뉴로">☰ 메뉴</a>
       <h1>견적서&amp;거래명세서 발행</h1>
       <span class="sub">예약 정보를 붙여넣거나 직접 입력해 사유원 · 신라철강 견적서와 거래명세서를 만듭니다</span>
     </div>
