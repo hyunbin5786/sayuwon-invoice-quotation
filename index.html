@@ -877,8 +877,11 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     });
     (catEdits.added || []).forEach(function(a){ list.push(Object.assign({ id:"u:" + a.uid }, a)); });
     list.forEach(function(it){
-      if(!KIND_LABEL[it.kind]) it.kind = classify(it.src || "").kind;   // 예전 '일반' 구분      if(it.kind === "view") it.form = "sayuwon";
+      if(!KIND_LABEL[it.kind]) it.kind = classify(it.src || "").kind;   // 예전 '일반' 구분
+      if(it.kind === "view") it.form = "sayuwon";
       if(it.kind === "package") it.form = "shilla";
+      // 구분을 '관람+식사'로 바꾼 품목(예: 새벽 해오름 산책(주말))도 이름으로 평일/주말을 정한다 → 식사 단가 = 가격 − 그날 입장료
+      if(it.kind === "package" && it.weekend == null) it.weekend = /주말|공휴일/.test(String(it.src || "") + String(it.name || ""));
     });
     // 직접 입력용
     list.push({ id:"etc_view", src:"", sys:true, kind:"view", form:"sayuwon", name:"", price:null, disc:true, label:"관람 · 기타 (직접 입력)" });
