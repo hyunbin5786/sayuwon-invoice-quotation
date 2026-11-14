@@ -197,6 +197,11 @@ header.top{display:flex; align-items:flex-end; justify-content:space-between; ga
 .modalhead input{padding:7px 10px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface); min-width:180px}
 .catcount{font-size:12px; color:var(--muted); font-weight:400}
 .cathint{margin:0; padding:10px 16px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line)}
+.catkinds{display:flex; flex-wrap:wrap; gap:6px; padding:10px 16px 0}
+.catkinds button{border:1px solid var(--line); background:transparent; color:var(--ink); border-radius:999px; padding:4px 12px; font:inherit; font-size:12.5px; cursor:pointer}
+.catkinds button small{color:var(--muted); margin-left:4px}
+.catkinds button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.catkinds button.on small{color:rgba(255,255,255,.75)}
 .catscroll{overflow:auto; flex:1; min-height:0}
 .cattable{width:100%; min-width:860px; border-collapse:collapse; font-size:12.5px; table-layout:fixed}
 .cattable th{position:sticky; top:0; background:var(--surface-2); text-align:left; font-weight:500; color:var(--muted); padding:8px 6px; border-bottom:1px solid var(--line); z-index:1}
@@ -615,6 +620,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       <button class="btn primary" type="button" id="cat-save" disabled title="고친 내용을 공유 목록에 저장합니다 (모두에게 반영)">저장</button>
       <button class="iconbtn" type="button" id="cat-close" aria-label="닫기">✕</button>
     </div>
+    <div class="catkinds" id="cat-kinds" role="group" aria-label="구분별로 보기"></div>
     <p class="cathint"><span id="cat-sync">수정한 내용은 이 브라우저에 저장됩니다.</span></p>
     <div class="catscroll">
       <table class="cattable">
@@ -2535,10 +2541,20 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     all.checked = vis.length > 0 && on === vis.length;
     all.indeterminate = on > 0 && on < vis.length;
   }
+  var catKind = "all";   // 구분별로 보기 (전체 · 단체(시간) · 단체(개별) · 관람 · 관람+식사 · 몽몽마방 메뉴 · 식사 · 굿즈)
+  function paintCatKinds(){
+    var all = CATALOG.filter(function(it){ return !it.sys && !it.hidden; }), cnt = {};
+    all.forEach(function(it){ cnt[it.kind] = (cnt[it.kind] || 0) + 1; });
+    var kinds = Object.keys(KIND_ORDER).sort(function(a, b){ return KIND_ORDER[a] - KIND_ORDER[b]; }).filter(function(k){ return cnt[k] || k === catKind; });   // 지금 정렬 순서대로
+    document.getElementById("cat-kinds").innerHTML = [["all", "전체", all.length]].concat(kinds.map(function(k){ return [k, KIND_LABEL[k] || k, cnt[k] || 0]; }))
+      .map(function(x){ return '<button type="button" data-kind="' + x[0] + '"' + (catKind === x[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + esc(x[1]) + '<small>' + x[2] + '</small></button>'; }).join("");
+  }
   function renderCatalog(){
     var q = normName(document.getElementById("cat-search").value).toLowerCase();
+    paintCatKinds();
     var items = CATALOG.filter(function(it){
       if(it.sys || it.hidden) return false;
+      if(catKind !== "all" && it.kind !== catKind) return false;
       return !q || (normName(it.src) + normName(it.name)).toLowerCase().indexOf(q) >= 0;
     });
     // 막 추가해 비어 있는 품목이 맨 위, 그다음 관람 → 관람+식사 → 식사 → 굿즈
@@ -2607,13 +2623,14 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     removeCat(id); renderCatalog();
   });
   document.getElementById("cat-search").addEventListener("input", renderCatalog);
+  document.getElementById("cat-kinds").addEventListener("click", function(e){ var b = e.target.closest("[data-kind]"); if(!b) return; catKind = b.getAttribute("data-kind"); picked = {}; renderCatalog(); });   // 구분 버튼
   document.getElementById("cat-add").addEventListener("click", function(){
     catEdits.added = catEdits.added || [];
     var item = { uid: Date.now(), src:"", name:"", kind:"food", form:"shilla", price:null, disc:false };
     catEdits.added.unshift(item);
     queueOp({ op:"add", item: Object.assign({}, item) });
     saveCatEdits(); buildCatalog();
-    document.getElementById("cat-search").value = "";
+    document.getElementById("cat-search").value = ""; catKind = "all";   // 새 품목이 보이게 전체로
     renderCatalog();
     var first = document.querySelector('#cat-body input[data-f="src"]'); if(first) first.focus();
   });
