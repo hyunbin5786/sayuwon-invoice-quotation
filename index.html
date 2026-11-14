@@ -719,8 +719,13 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
     "평일 관람(09:00~18:00)|50000|1",
     "평일 관람(13:00~18:00)|50000|1",
     "평일(관람)|50000|1",
-    "평일 관람(학생)|45000|1",
-    "주말/공휴일 관람(학생)|62000|1",
+    "평일 관람(학생)(09:00~18:00)|45000|1",
+    "평일 관람(학생)(13:00~18:00)|45000|1",
+    "주말/공휴일 관람(학생)(09:00~18:00)|62000|1",
+    "주말/공휴일 관람(학생)(13:00~18:00)|62000|1",
+    // 예전 학생 품목(시간대 없음): 목록에서는 숨기고, 예전 발급 내역을 불러올 때만 쓴다
+    "평일 관람(학생)|45000|1|old",
+    "주말/공휴일 관람(학생)|62000|1|old",
     "평일(관람, 몽몽마방 사유의 밥상)|88000|0",
     "평일(관람, 사담 디너)|130000|1",
     "평일(관람, 사담 런치1부)|130000|1",
@@ -862,6 +867,7 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       it.src = src; it.def = true; it.id = "c:" + src;
       it.price = c[1] ? Number(c[1]) : null;
       it.disc = c[2] === "1";
+      if(c[3] === "old") it.hidden = true;   // 예전 품목: 목록엔 안 보이고 예전 문서만 그대로 열림
       if(TAX_SPLIT[src]){ it.taxable = TAX_SPLIT[src][0]; it.taxfree = TAX_SPLIT[src][1]; }   // 기본 과세 · 비과세 (품목 관리에서 바꾼 값이 우선)
       var base = it.name;
       if(edits[src]) Object.assign(it, edits[src]);
@@ -2348,7 +2354,10 @@ html.cat-only #catalog-modal .modalbox{width:100%; max-height:100vh; height:100v
       rows.forEach(function(r){
         var p = product(r.pid);
         if(!p || p.kind !== "view" || /학생/.test(p.src || "") || stu > (Number(r.qty) || 0)){ split.push(r); return; }
-        var sv = findBySrc(/주말|공휴일/.test(p.src || p.name || "") ? "주말/공휴일 관람(학생)" : "평일 관람(학생)");
+        // 학생 품목도 성인 관람과 같은 시간대(09:00~18:00 / 13:00~18:00)로. 시간대가 없으면 09:00~18:00
+        var base = /주말|공휴일/.test(p.src || p.name || "") ? "주말/공휴일 관람(학생)" : "평일 관람(학생)";
+        var time = (String(p.src || "").match(/\(\d{1,2}:\d{2}~\d{1,2}:\d{2}\)/) || [])[0] || "(09:00~18:00)";
+        var sv = findBySrc(base + time) || findBySrc(base + "(09:00~18:00)");
         if(!sv){ warns.push("학생 관람 품목이 품목 목록에 없어 학생 " + stu + "명을 나누지 못했습니다."); split.push(r); return; }
         r.qty = (Number(r.qty) || 0) - stu; r.cat = "adult";
         var s = placeRow(sv.id, stu); s.cat = "student"; s.disc = r.disc;
